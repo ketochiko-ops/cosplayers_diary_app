@@ -1,18 +1,19 @@
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import '../../../core/database/app_database.dart';
 import '../../../core/database/app_state_persistence.dart';
+import '../../../core/database/settings_store.dart';
 import '../../backup/application/backup_coordinator.dart';
 import '../domain/backup_reminder.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({
-    required this.database,
+    required this.settingsStore,
     required this.persistence,
     super.key,
   });
-  final AppDatabase? database;
+  final SettingsStore? settingsStore;
   final AppStatePersistence? persistence;
 
   @override
@@ -31,10 +32,10 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _load() async {
-    final database = widget.database;
-    if (database == null) return;
-    final backup = await database.readSetting('last_backup_at');
-    final mode = await database.readSetting('photo_save_mode');
+    final settingsStore = widget.settingsStore;
+    if (settingsStore == null) return;
+    final backup = await settingsStore.readSetting('last_backup_at');
+    final mode = await settingsStore.readSetting('photo_save_mode');
     if (mounted) {
       setState(() {
         _lastBackup = backup == null ? null : DateTime.tryParse(backup);
@@ -52,6 +53,17 @@ class _SettingsPageState extends State<SettingsPage> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        if (kIsWeb)
+          Card(
+            color: Theme.of(context).colorScheme.primaryContainer,
+            child: const ListTile(
+              leading: Icon(Icons.install_mobile_outlined),
+              title: Text('ホーム画面に追加して利用できます'),
+              subtitle: Text(
+                'データはこのブラウザ内に保存されます。端末変更やブラウザデータ削除に備えて、定期的にZIPバックアップを作成してください。',
+              ),
+            ),
+          ),
         if (due)
           Card(
             color: Theme.of(context).colorScheme.secondaryContainer,
@@ -76,7 +88,7 @@ class _SettingsPageState extends State<SettingsPage> {
           onChanged: (value) async {
             if (value == null) return;
             setState(() => _photoMode = value);
-            await widget.database?.writeSetting('photo_save_mode', value);
+            await widget.settingsStore?.writeSetting('photo_save_mode', value);
           },
         ),
         const SizedBox(height: 24),
@@ -116,7 +128,7 @@ class _SettingsPageState extends State<SettingsPage> {
       dialogTitle: 'バックアップの保存先を選択',
     );
     if (uri == null) return;
-    await widget.database!.writeSetting(
+    await widget.settingsStore!.writeSetting(
       'last_backup_at',
       now.toIso8601String(),
     );

@@ -27,6 +27,10 @@ flutter run -d <device-id>
 
 Android releaseは `flutter build appbundle --release`、iOS releaseはmacOS/Xcodeで `flutter build ipa --release` です。
 
+Web/PWAはローカル確認に `flutter run -d chrome`、リリース生成に `flutter build web --release --pwa-strategy=none` を使います。独自の `app_service_worker.js` を使うため、Flutter生成Service Workerは無効化します。サブパス配信では `--base-href /path/` を指定し、HTTPSで配信します。GitHub Pages用の自動配信は `.github/workflows/deploy-pwa.yml` です。
+
+ビルド後に `node tool/verify_pwa.mjs build/web` を実行すると、manifestのJSON、独自Service Worker登録、ローカルCanvasKit設定、プリキャッシュ対象ファイルの存在を検証できます。公開ワークフローでも同じ検証を実行します。
+
 ## 変更箇所マップ
 
 | 変更したいこと | 主な開始地点 | 同時に確認するもの |
@@ -37,7 +41,8 @@ Android releaseは `flutter build appbundle --release`、iOS releaseはmacOS/Xco
 | カラコン在庫/使用 | `lens_service.dart` | 日記との整合性、LensStore、JSON、CSV、統計 |
 | 写真保存 | `photo_service.dart`, `local_file_store.dart` | UI composition、メタデータ永続化、ZIP画像 |
 | SQLite | `schema.dart`, `app_database.dart` | version追加、DB結合テスト、JSON正本との関係 |
-| 自動保存/復元 | `app_state_persistence.dart` | 全モデルの往復、古いJSON、dispose時保存 |
+| 自動保存/復元 | `app_state_persistence.dart`, `settings_store.dart` | SQLite/localStorage、全モデルの往復、古いJSON、dispose時保存 |
+| PWA/配信 | `web/`, `.github/workflows/deploy-pwa.yml` | manifest、アイコン、base href、HTTPS、オフライン再起動 |
 | CSV | `csv_service.dart`, `backup_coordinator.dart` | README列定義、samples、参照検証、BOM |
 | ZIP | `backup_service.dart`, `backup_coordinator.dart` | 検証前非破壊、サイズ/パス/形式、設定UI |
 | 統計 | `statistics_service.dart`, `dashboard_page.dart` | 回数対日数、年filter、空状態、ID→名称表示 |

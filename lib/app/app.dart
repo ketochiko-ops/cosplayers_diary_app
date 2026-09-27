@@ -10,26 +10,26 @@ import '../features/diary/presentation/diary_pages.dart';
 import '../features/contact_lenses/application/lens_store.dart';
 import '../features/master_data/presentation/management_page.dart';
 import '../features/dashboard/presentation/dashboard_page.dart';
-import '../core/database/app_database.dart';
 import '../core/database/app_state_persistence.dart';
+import '../core/database/settings_store.dart';
 import '../features/settings/presentation/settings_page.dart';
 
 class CosplayDiaryApp extends StatelessWidget {
-  const CosplayDiaryApp({this.database, super.key});
-  final AppDatabase? database;
+  const CosplayDiaryApp({this.settingsStore, super.key});
+  final SettingsStore? settingsStore;
 
   @override
   Widget build(BuildContext context) => MaterialApp(
     title: 'コスプレ日記',
     debugShowCheckedModeBanner: false,
     theme: buildAppTheme(),
-    home: AppShell(database: database),
+    home: AppShell(settingsStore: settingsStore),
   );
 }
 
 class AppShell extends StatefulWidget {
-  const AppShell({this.database, super.key});
-  final AppDatabase? database;
+  const AppShell({this.settingsStore, super.key});
+  final SettingsStore? settingsStore;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -46,10 +46,10 @@ class _AppShellState extends State<AppShell> {
   @override
   void initState() {
     super.initState();
-    if (widget.database != null) {
+    if (widget.settingsStore != null) {
       _loading = true;
       _persistence = AppStatePersistence(
-        database: widget.database!,
+        store: widget.settingsStore!,
         masters: _masterStore,
         diary: _diaryStore,
         lenses: _lensStore,
@@ -84,7 +84,10 @@ class _AppShellState extends State<AppShell> {
       1 => DiaryListPage(store: _diaryStore, masterStore: _masterStore),
       2 => ManagementPage(masterStore: _masterStore, lensStore: _lensStore),
       3 => DashboardPage(diaryStore: _diaryStore, lensStore: _lensStore),
-      4 => SettingsPage(database: widget.database, persistence: _persistence),
+      4 => SettingsPage(
+        settingsStore: widget.settingsStore,
+        persistence: _persistence,
+      ),
       _ => PlaceholderFeaturePage(title: pageTitles[_index]),
     };
     final content = wide

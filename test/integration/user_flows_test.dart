@@ -91,7 +91,7 @@ void main() {
       quantity: 2,
     );
     final first = AppStatePersistence(
-      database: firstDb,
+      store: firstDb,
       masters: masters,
       diary: diaries,
       lenses: lenses,
@@ -107,7 +107,7 @@ void main() {
     final restoredDiaries = DiaryStore();
     final restoredLenses = LensStore();
     final second = AppStatePersistence(
-      database: secondDb,
+      store: secondDb,
       masters: restoredMasters,
       diary: restoredDiaries,
       lenses: restoredLenses,

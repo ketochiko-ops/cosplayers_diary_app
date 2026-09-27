@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="コスプレ活動を端末内で安全に管理できるオフライン対応アプリです。">
+  <meta name="theme-color" content="#14213D">
+
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="コスプレ日記">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/Icon-180.png">
+
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="manifest" href="manifest.json">
+  <title>コスプレ日記</title>
+
+  <style>
+    html, body {
+      background: #f7f5f0;
+      height: 100%;
+      margin: 0;
+    }
+    .loading {
+      align-items: center;
+      color: #14213d;
+      display: flex;
+      font: 600 16px system-ui, sans-serif;
+      height: 100%;
+      justify-content: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="loading" aria-live="polite">コスプレ日記を起動しています…</div>
+  <script>
+    window.addEventListener('flutter-first-frame', function () {
+      const loading = document.querySelector('.loading');
+      if (loading) loading.remove();
+    });
+  </script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

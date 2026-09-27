@@ -6,7 +6,7 @@
 
 ```text
 lib/
-├── main.dart                         # SQLiteを開きアプリを起動
+├── main.dart                         # プラットフォーム別SettingsStoreを開きアプリを起動
 ├── app/
 │   ├── app.dart                      # ストア所有、状態復元、レスポンシブシェル
 │   ├── router.dart                   # 5つのナビゲーション定義
@@ -37,7 +37,9 @@ lib/
 
 ```text
 main()
-  └─ AppDatabase.openDefault()
+  └─ openDefaultSettingsStore()
+      ├─ native → AppDatabase.openDefault()
+      ├─ web → WebSettingsStore(localStorage)
       └─ CosplayDiaryApp
           └─ AppShell
               ├─ MasterDataStore
@@ -54,11 +56,11 @@ main()
 | 1 | `DiaryListPage` | DiaryStore, MasterDataStore |
 | 2 | `ManagementPage` | MasterDataStore, LensStore |
 | 3 | `DashboardPage` | DiaryStore, LensStore |
-| 4 | `SettingsPage` | AppDatabase, AppStatePersistence |
+| 4 | `SettingsPage` | SettingsStore, AppStatePersistence |
 
 幅600px未満は `NavigationBar`、600px以上は `NavigationRail` です。ルーティングパッケージは使わず、編集画面は `MaterialPageRoute` でpushします。
 
-`CosplayDiaryApp(database: null)` はテスト用の有効な構成です。この場合、初期ロード画面、永続化、設定のバックアップ操作は無効になります。
+`CosplayDiaryApp(settingsStore: null)` はテスト用の有効な構成です。この場合、初期ロード画面、永続化、設定のバックアップ操作は無効になります。
 
 ## 状態変更と自動保存
 
@@ -71,7 +73,7 @@ Presentation
       ├─ AnimatedBuilderが再描画
       └─ AppStatePersistenceが250msデバウンス
           → 全ストアをJSON化
-          → settings(key='app_state_v1')へreplace
+          → SettingsStore(key='app_state_v1')へ保存
 ```
 
 アプリ起動時は逆方向に、JSONを読み、3ストアが保持する公開Listを `clear` + `addAll` で復元します。`AppShell.dispose()` は保留中タイマーを止めた後、最終状態を保存します。
@@ -79,10 +81,16 @@ Presentation
 ### 現行の正本
 
 - ランタイム状態: 各ストアのインメモリList
-- 再起動後の正本: SQLite `settings.app_state_v1` のJSON
+- 再起動後の正本: ネイティブはSQLite `settings.app_state_v1`、WebはlocalStorage `cosplayers_diary.app_state_v1` のJSON
 - `genres`、`diary` などの正規化テーブル: version 1 migrationで作成されるが未使用
 
 正規化テーブルへの保存を追加する場合は、JSONとの二重書き込みを安易に増やさず、どちらを正本にするかと移行/ロールバックを先に決めます。
+
+Webとネイティブは同じJSON表現とZIPバックアップ形式を使用します。ただしブラウザのサンドボックスからiOSアプリのSQLiteへ直接アクセスできないため、両者間のデータ移行は設定画面のZIP作成・復元で行います。Webの保存領域は公開オリジンごとに分離され、ブラウザデータ削除の対象です。
+
+## PWA配信
+
+`web/manifest.json` がホーム画面名、テーマ色、通常/マスカブルアイコンを定義します。Flutter自動生成Service Workerには依存せず、`web/app_service_worker.js` が同一オリジンのアプリシェルと実行時取得リソースをキャッシュします。`web/flutter_bootstrap.js` はService Workerを登録し、CanvasKitを同梱ファイルから読み込むため、初回オンライン起動後はオフラインでも起動できます。GitHub Pages用のワークフローは `.github/workflows/deploy-pwa.yml` で、リポジトリ配下のベースパスをビルド時に自動指定します。
 
 ## SQLite
 
@@ -115,7 +123,7 @@ ZIP bytes
       ├─ formatVersion検証
       └─ imageCount検証
   → data/app_state.json をrestoreJson()
-  → SQLiteへsave()
+  → SettingsStoreへsave()
 ```
 
 注意点:
@@ -140,6 +148,7 @@ ZIP bytes
 |---|---|
 | `sqflite`, `sqflite_common` | モバイルSQLiteと共通API |
 | `sqflite_common_ffi` | テスト用インメモリSQLite |
+| `web` | PWAでlocalStorageへアクセスするWeb API境界 |
 | `image_picker` | 将来の画像選択用。現行UI未接続 |
 | `image` | 向き補正、縮小、JPEG変換 |
 | `path_provider`, `path` | アプリ領域/安全なパス操作 |

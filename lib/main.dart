@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
 import 'app/app.dart';
-import 'core/database/app_database.dart';
+import 'core/database/default_settings_store.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final database = await AppDatabase.openDefault();
-  runApp(CosplayDiaryApp(database: database));
+  final settingsStore = await openDefaultSettingsStore();
+  runApp(CosplayDiaryApp(settingsStore: settingsStore));
 }

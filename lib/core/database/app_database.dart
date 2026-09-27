@@ -3,8 +3,9 @@ import 'package:sqflite/sqflite.dart' as sqflite;
 import 'package:sqflite_common/sqlite_api.dart';
 
 import 'schema.dart';
+import 'settings_store.dart';
 
-class AppDatabase {
+class AppDatabase implements SettingsStore {
   AppDatabase._(this.raw);
   final Database raw;
 
@@ -48,6 +49,7 @@ class AppDatabase {
     });
   }
 
+  @override
   Future<String?> readSetting(String key) async {
     final rows = await raw.query(
       'settings',
@@ -59,6 +61,7 @@ class AppDatabase {
     return rows.isEmpty ? null : rows.single['value'] as String;
   }
 
+  @override
   Future<void> writeSetting(String key, String value) => raw.insert(
     'settings',
     {'key': key, 'value': value},

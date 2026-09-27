@@ -7,17 +7,17 @@ import '../../features/diary/application/diary_store.dart';
 import '../../features/diary/domain/diary_models.dart';
 import '../../features/master_data/application/master_data_store.dart';
 import '../../features/master_data/domain/master_models.dart';
-import 'app_database.dart';
+import 'settings_store.dart';
 
 class AppStatePersistence {
   AppStatePersistence({
-    required this.database,
+    required this.store,
     required this.masters,
     required this.diary,
     required this.lenses,
   });
   static const stateKey = 'app_state_v1';
-  final AppDatabase database;
+  final SettingsStore store;
   final MasterDataStore masters;
   final DiaryStore diary;
   final LensStore lenses;
@@ -25,7 +25,7 @@ class AppStatePersistence {
   bool _attached = false;
 
   Future<void> load() async {
-    final source = await database.readSetting(stateKey);
+    final source = await store.readSetting(stateKey);
     if (source == null || source.isEmpty) return;
     restoreJson(source);
   }
@@ -43,7 +43,7 @@ class AppStatePersistence {
     _timer = Timer(const Duration(milliseconds: 250), save);
   }
 
-  Future<void> save() => database.writeSetting(stateKey, exportJson());
+  Future<void> save() => store.writeSetting(stateKey, exportJson());
 
   String exportJson() => jsonEncode({
     'genres': [
