@@ -99,7 +99,7 @@ Web実装は `web/project_storage.js` と `project_storage_web.dart` のJS inter
 
 `web/manifest.json` がホーム画面名、テーマ色、通常/マスカブルアイコンを定義します。Flutter自動生成Service Workerには依存せず、`web/app_service_worker.js` が同一オリジンのアプリシェルと実行時取得リソースをキャッシュします。`web/flutter_bootstrap.js` はService Workerを登録し、CanvasKitを同梱ファイルから読み込むため、初回オンライン起動後はオフラインでも起動できます。
 
-Vercelではドメイン直下用に `--base-href /` でビルドし、`tool/prepare_vercel_output.mjs` が `build/web` をBuild Output API形式の `.vercel/output/static` へ変換します。`.github/workflows/deploy-pwa.yml` は検証後に `cosplayers-diary-app` のProductionへprebuilt成果物をデプロイします。公開URLは `https://cosplayers-diary-app.vercel.app` です。
+Vercelではドメイン直下用に `--base-href /` でビルドし、`tool/prepare_vercel_output.mjs` が `build/web` をBuild Output API形式の `.vercel/output/static` へ変換します。Build Outputには実ファイルを優先するfilesystemルートと、Flutter Web向けの `index.html` フォールバックを含めます。`.github/workflows/deploy-pwa.yml` はProduction用のprebuilt成果物をステージし、HTTP検証に成功したデプロイだけを `cosplayers-diary-app` の本番ドメインへ昇格します。`vercel.json` はVercelのGit自動デプロイを無効化し、公開経路をこのワークフローへ一本化します。公開URLは `https://cosplayers-diary-app.vercel.app` です。
 
 ## SQLite
 

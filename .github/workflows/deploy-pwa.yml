@@ -15,6 +15,8 @@ concurrency:
 
 env:
   VERCEL_CLI_VERSION: 60.1.3
+  VERCEL_ORG_ID: team_Rbg5zDuYk4PVnZooEJicDPqj
+  VERCEL_PROJECT_ID: prj_7R31pxnvTFKBrZ42qqMqloppNLyb
 
 jobs:
   deploy:
@@ -47,15 +49,39 @@ jobs:
       - run: node --check web/app_service_worker.js
       - run: node tool/verify_pwa.mjs build/web
       - run: node tool/prepare_vercel_output.mjs build/web
-      - name: Deploy to Vercel Production
+      - name: Stage Vercel Production deployment
         run: |
           set -euo pipefail
           : "${VERCEL_TOKEN:?Repository secret VERCEL_TOKEN is not set}"
-          : "${VERCEL_ORG_ID:?Repository secret VERCEL_ORG_ID is not set}"
-          : "${VERCEL_PROJECT_ID:?Repository secret VERCEL_PROJECT_ID is not set}"
-          npx --yes --package "vercel@$VERCEL_CLI_VERSION" \
-            vercel deploy --yes --prebuilt --prod
+          deployment_url="$(npx --yes --package "vercel@$VERCEL_CLI_VERSION" \
+            vercel deploy --yes --prebuilt --prod --skip-domain)"
+          case "$deployment_url" in
+            https://*.vercel.app) ;;
+            *) echo "Unexpected deployment URL: $deployment_url" >&2; exit 1 ;;
+          esac
+          echo "DEPLOYMENT_URL=$deployment_url" >> "$GITHUB_ENV"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      - name: Verify staged deployment
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error \
+            --retry 5 --retry-all-errors --retry-delay 2 \
+            "$DEPLOYMENT_URL/" -o /tmp/cosplayers-diary-index.html
+          grep -Fq '<title>コスプレ日記</title>' \
+            /tmp/cosplayers-diary-index.html
+      - name: Promote verified deployment
+        run: >-
+          npx --yes --package "vercel@$VERCEL_CLI_VERSION"
+          vercel promote "$DEPLOYMENT_URL" --yes
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      - name: Verify production alias
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error \
+            --retry 5 --retry-all-errors --retry-delay 2 \
+            https://cosplayers-diary-app.vercel.app/ \
+            -o /tmp/cosplayers-diary-production-index.html
+          grep -Fq '<title>コスプレ日記</title>' \
+            /tmp/cosplayers-diary-production-index.html

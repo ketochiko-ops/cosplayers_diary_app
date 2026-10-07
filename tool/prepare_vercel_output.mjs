@@ -14,9 +14,16 @@ if (!fs.existsSync(path.join(sourceDirectory, 'index.html'))) {
 fs.rmSync(outputDirectory, { recursive: true, force: true });
 fs.mkdirSync(staticDirectory, { recursive: true });
 fs.cpSync(sourceDirectory, staticDirectory, { recursive: true });
+const config = {
+  version: 3,
+  routes: [
+    { handle: 'filesystem' },
+    { src: '/.*', dest: '/index.html' },
+  ],
+};
 fs.writeFileSync(
   path.join(outputDirectory, 'config.json'),
-  `${JSON.stringify({ version: 3 }, null, 2)}\n`,
+  `${JSON.stringify(config, null, 2)}\n`,
 );
 
 console.log(`${sourceDirectory} をVercel Build Outputへ変換しました。`);

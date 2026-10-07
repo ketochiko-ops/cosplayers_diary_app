@@ -27,11 +27,11 @@ flutter run -d <device-id>
 
 Android releaseは `flutter build appbundle --release`、iOS releaseはmacOS/Xcodeで `flutter build ipa --release` です。
 
-Web/PWAはローカル確認に `flutter run -d chrome`、Vercel用リリース生成に `flutter build web --release --pwa-strategy=none --base-href /` を使います。独自の `app_service_worker.js` を使うため、Flutter生成Service Workerは無効化します。HTTPS配信先はVercelの `cosplayers-diary-app` プロジェクトです。
+Web/PWAはローカル確認に `flutter run -d chrome`、Vercel用リリース生成に `flutter build web --release --pwa-strategy=none --base-href /` を使います。独自の `app_service_worker.js` を使うため、Flutter生成Service Workerは無効化します。HTTPS配信先はVercelの `cosplayers-diary-app` プロジェクトです。VercelのGit自動デプロイは無効で、公開はGitHub Actionsが生成する検証済みprebuilt成果物だけを使用します。
 
 Google Drive連携を公開する場合、サイト運営者がGoogle CloudのWeb OAuthクライアントを作成し、GitHub ActionsのRepository variable `GOOGLE_OAUTH_CLIENT_ID` を設定します。ワークフローは `--dart-define` で公開クライアントIDをビルドへ渡します。未設定時はGoogle Drive接続ボタンが無効です。利用者個別のOAuthクライアントIDを公開サイトで入力させる方式はGoogleのドメイン所有要件に合いません。
 
-ビルド後に `node tool/verify_pwa.mjs build/web` を実行すると、manifestのJSON、独自Service Worker登録、ローカルCanvasKit設定、プリキャッシュ対象ファイルの存在を検証できます。続けて `node tool/prepare_vercel_output.mjs build/web` を実行すると、Vercel CLIの `vercel deploy --prebuilt --prod` で公開できる成果物になります。`.github/workflows/deploy-pwa.yml` も同じ検証・変換を行います。
+ビルド後に `node tool/verify_pwa.mjs build/web` を実行すると、manifestのJSON、独自Service Worker登録、ローカルCanvasKit設定、プリキャッシュ対象ファイルの存在を検証できます。続けて `node tool/prepare_vercel_output.mjs build/web` を実行すると、Vercel CLIの `vercel deploy --prebuilt --prod --skip-domain` でステージできる成果物になります。`.github/workflows/deploy-pwa.yml` も同じ検証・変換を行い、ステージURLのHTMLを検証してから本番へ昇格します。
 
 ## 変更箇所マップ
 
