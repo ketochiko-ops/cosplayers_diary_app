@@ -74,10 +74,10 @@ jobs:
             /tmp/cosplayers-diary-index.html
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      - name: Promote verified deployment
+      - name: Deploy verified build to Production
         run: >-
           npx --yes --package "vercel@$VERCEL_CLI_VERSION"
-          vercel promote "$DEPLOYMENT_URL" --yes
+          vercel deploy --yes --prebuilt --prod
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       - name: Verify production alias

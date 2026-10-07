@@ -112,7 +112,7 @@ npx --yes --package vercel@60.1.3 vercel deploy --prebuilt --prod --skip-domain
 
 Web版のアプリ状態は同じ `app_state_v1` JSONをブラウザのローカルストレージへ保存します。任意のプロジェクト保存を設定すると、そのJSONを更新のたびに選択した保存先へも書き込みます。ネイティブ版のSQLiteをWebから直接開くことはできないため、ネイティブ版との移行には設定画面のZIPバックアップ作成・復元を使用してください。Safariの「履歴とWebサイトデータを消去」などでブラウザ保存が削除されるため、定期バックアップを推奨します。
 
-Vercelへの公開ワークフローは [`.github/workflows/deploy-pwa.yml`](.github/workflows/deploy-pwa.yml) にあります。GitHub ActionsのRepository secretへ `VERCEL_TOKEN` を登録すると、`develop` へのpushまたは手動実行で解析・テスト・PWA検証を行い、Production用のprebuiltデプロイを認証付き `vercel curl` でHTTP検証してから本番ドメインへ昇格します。Team IDとProject IDは公開情報のためワークフローに固定しています。VercelのGit自動デプロイは [`vercel.json`](vercel.json) で無効化し、Flutterをビルドしていない空のデプロイが本番を上書きしないようにしています。Vercelプロジェクト名は `cosplayers-diary-app` です。
+Vercelへの公開ワークフローは [`.github/workflows/deploy-pwa.yml`](.github/workflows/deploy-pwa.yml) にあります。GitHub ActionsのRepository secretへ `VERCEL_TOKEN` を登録すると、`develop` へのpushまたは手動実行で解析・テスト・PWA検証を行い、Production用のprebuiltデプロイを認証付き `vercel curl` でHTTP検証してから、同じprebuilt成果物を本番ドメインへ公開します。Team IDとProject IDは公開情報のためワークフローに固定しています。VercelのGit自動デプロイは [`vercel.json`](vercel.json) で無効化し、Flutterをビルドしていない空のデプロイが本番を上書きしないようにしています。Vercelプロジェクト名は `cosplayers-diary-app` です。
 
 iPhoneではSafariで公開URLを開き、共有メニューから「ホーム画面に追加」を選択します。初回表示と更新取得にはネット接続が必要ですが、その後はキャッシュ済みのアプリをオフラインで起動できます。
 
