@@ -134,7 +134,7 @@ test/
 ### 保守性
 
 - `csv`、`image_picker`、`path_provider`、`share_plus` は、少なくとも現行 `lib/` から一部または全部が未使用。
-- Vercelの自動公開にはGitHub ActionsのRepository secrets（`VERCEL_TOKEN`、`VERCEL_ORG_ID`、`VERCEL_PROJECT_ID`）が必要。
+- Vercelの自動公開にはGitHub ActionsのRepository secret `VERCEL_TOKEN` が必要。`VERCEL_ORG_ID` と `VERCEL_PROJECT_ID` はワークフローの固定環境変数で管理する。
 - app state JSONのschema versionがpayload内にない。キー名だけが `app_state_v1`。
 - ストアのListが外部から直接変更可能で、変更時に通知や保存を迂回できる。
 
