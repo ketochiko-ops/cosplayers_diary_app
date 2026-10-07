@@ -31,7 +31,7 @@ Web/PWAはローカル確認に `flutter run -d chrome`、Vercel用リリース�
 
 Google Drive連携を公開する場合、サイト運営者がGoogle CloudのWeb OAuthクライアントを作成し、GitHub ActionsのRepository variable `GOOGLE_OAUTH_CLIENT_ID` を設定します。ワークフローは `--dart-define` で公開クライアントIDをビルドへ渡します。未設定時はGoogle Drive接続ボタンが無効です。利用者個別のOAuthクライアントIDを公開サイトで入力させる方式はGoogleのドメイン所有要件に合いません。
 
-ビルド後に `node tool/verify_pwa.mjs build/web` を実行すると、manifestのJSON、独自Service Worker登録、ローカルCanvasKit設定、プリキャッシュ対象ファイルの存在を検証できます。続けて `node tool/prepare_vercel_output.mjs build/web` を実行すると、Vercel CLIの `vercel deploy --prebuilt --prod --skip-domain` でステージできる成果物になります。`.github/workflows/deploy-pwa.yml` も同じ検証・変換を行い、ステージURLのHTMLを検証してから本番へ昇格します。
+ビルド後に `node tool/verify_pwa.mjs build/web` を実行すると、manifestのJSON、独自Service Worker登録、ローカルCanvasKit設定、プリキャッシュ対象ファイルの存在を検証できます。続けて `node tool/prepare_vercel_output.mjs build/web` を実行すると、Vercel CLIの `vercel deploy --prebuilt --prod --skip-domain` でステージできる成果物になります。`.github/workflows/deploy-pwa.yml` も同じ検証・変換を行い、Deployment Protectionが有効なステージURLを認証付き `vercel curl` で検証してから本番へ昇格します。
 
 ## 変更箇所マップ
 

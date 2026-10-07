@@ -65,11 +65,15 @@ jobs:
       - name: Verify staged deployment
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error \
+          npx --yes --package "vercel@$VERCEL_CLI_VERSION" \
+            vercel curl "$DEPLOYMENT_URL/" -- \
+            --fail --silent --show-error \
             --retry 5 --retry-all-errors --retry-delay 2 \
-            "$DEPLOYMENT_URL/" -o /tmp/cosplayers-diary-index.html
+            > /tmp/cosplayers-diary-index.html
           grep -Fq '<title>コスプレ日記</title>' \
             /tmp/cosplayers-diary-index.html
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       - name: Promote verified deployment
         run: >-
           npx --yes --package "vercel@$VERCEL_CLI_VERSION"
