@@ -13,6 +13,7 @@ iOS・iPadOS・Android・PWA向けの、完全オフライン型コスプレ活�
 - 最終バックアップから30日経過した場合の端末内リマインド
 - 600px未満は下部ナビゲーション、600px以上はNavigationRail
 - iPhone/iPadのホーム画面追加と、インストール後のオフライン起動に対応するPWA
+- PWAではプロジェクトJSONのローカルファイル保存（対応ブラウザ）または任意のGoogle Drive連携
 
 ## 技術と構成
 
@@ -94,22 +95,41 @@ flutter build ipa --release
 
 ### Web / PWA
 
+本番公開URL: <https://cosplayers-diary-app.vercel.app>
+
 ```sh
 flutter run -d chrome
-flutter build web --release --pwa-strategy=none
+flutter build web --release --pwa-strategy=none --base-href /
 ```
 
-生成物は `build/web` です。PWA機能とブラウザ保存を正しく動かすため、公開時はHTTPSで配信してください（`localhost` での開発は例外です）。サブディレクトリへ公開する場合は、次のように末尾の `/` を含むベースパスを指定します。
+生成物は `build/web` です。PWA機能とブラウザ保存を正しく動かすため、公開時はHTTPSで配信してください（`localhost` での開発は例外です）。Vercelではドメイン直下へ公開するため、`--base-href /` を指定します。
 
 ```sh
-flutter build web --release --pwa-strategy=none --base-href /cosplayers_diary_app/
+node tool/verify_pwa.mjs build/web
+node tool/prepare_vercel_output.mjs build/web
+npx --yes --package vercel@60.1.3 vercel deploy --prebuilt --prod
 ```
 
-Web版のアプリ状態は同じ `app_state_v1` JSONをブラウザのローカルストレージへ保存します。ネイティブ版のSQLiteをWebから直接開くことはできないため、端末間の移行には設定画面のZIPバックアップ作成・復元を使用してください。Safariの「履歴とWebサイトデータを消去」などでブラウザ保存が削除されるため、定期バックアップを推奨します。
+Web版のアプリ状態は同じ `app_state_v1` JSONをブラウザのローカルストレージへ保存します。任意のプロジェクト保存を設定すると、そのJSONを更新のたびに選択した保存先へも書き込みます。ネイティブ版のSQLiteをWebから直接開くことはできないため、ネイティブ版との移行には設定画面のZIPバックアップ作成・復元を使用してください。Safariの「履歴とWebサイトデータを消去」などでブラウザ保存が削除されるため、定期バックアップを推奨します。
 
-GitHub Pagesへの公開ワークフローは [`.github/workflows/deploy-pwa.yml`](.github/workflows/deploy-pwa.yml) にあります。GitHubのリポジトリ設定で Pages のSourceを「GitHub Actions」に変更すると、`develop` へのpushまたは手動実行で、リポジトリ名を含むベースパスへ自動ビルド・公開します。
+Vercelへの公開ワークフローは [`.github/workflows/deploy-pwa.yml`](.github/workflows/deploy-pwa.yml) にあります。GitHub ActionsのRepository secretsへ `VERCEL_TOKEN`、`VERCEL_ORG_ID`、`VERCEL_PROJECT_ID` を登録すると、`develop` へのpushまたは手動実行で解析・テスト・PWA検証後に本番公開します。Vercelプロジェクト名は `cosplayers-diary-app` です。
 
 iPhoneではSafariで公開URLを開き、共有メニューから「ホーム画面に追加」を選択します。初回表示と更新取得にはネット接続が必要ですが、その後はキャッシュ済みのアプリをオフラインで起動できます。
+
+### PWAのプロジェクト保存と端末間の利用
+
+設定画面の「プロジェクト保存」で次のいずれかを選びます。連携しない場合もブラウザ内への自動保存は続きます。
+
+| 保存先 | 使い方 | 制約 |
+|---|---|---|
+| ローカルファイル | 「新しいプロジェクトを保存」で同期フォルダ内の場所を選ぶか、既存の `.json` を開く | ファイルへの継続書き込みが可能なChrome/Edgeなどで利用可能。iPhone/iPadのSafari PWAでは使えません |
+| Google Drive | サイト運営者によるOAuth設定後、各利用者が「Google Driveに接続」を選ぶ | 各利用者のDrive上に `CosplayDiary/CosplayDiary.project.json` を作成します。接続時と保存時にネット接続が必要です |
+
+サイト運営者は[Google Cloud Console](https://console.cloud.google.com/) でプロジェクトを作成し、Google Drive APIを有効化して、OAuth同意画面に `https://www.googleapis.com/auth/drive.file` を登録します。次に「ウェブアプリケーション」型のOAuthクライアントを作り、**承認済みJavaScript生成元**へ `https://cosplayers-diary-app.vercel.app` を登録します。GitHub ActionsのRepository variable `GOOGLE_OAUTH_CLIENT_ID` に発行されたクライアントID（`...apps.googleusercontent.com`）を設定して再デプロイします。設定前はアプリのGoogle Drive接続ボタンが無効です。クライアントシークレットは設定しません。OAuthアプリの公開設定、サイトのドメイン確認、プライバシーポリシー等は[Googleの要件](https://developers.google.com/identity/protocols/oauth2/policies)に従ってサイト運営者が設定します。利用者が各自でこの公開サイト向けのOAuthクライアントIDを作る運用は、ドメイン所有の要件に合いません。
+
+初回接続時に端末と保存先の内容が異なる場合は、どちらの内容を採用するか確認します。接続中は更新ごとに自動保存します。ファイルが別の端末で変更された場合や認証・通信が失敗した場合は外部への自動保存を停止し、端末のブラウザ内には変更を残します。再接続して使用する内容を選んでください。Googleのアクセストークンは再起動をまたいで保存しないため、アプリを開き直した後は再接続が必要です。Google Driveとローカルファイルを同時に自動保存する設定はありません。
+
+プロジェクトJSONと現行ZIPバックアップには写真の画像データは含まれません。ネイティブアプリではこのプロジェクト連携は未対応で、従来どおりSQLiteとZIPバックアップを使用します。Google Drive連携はログイン中のPWAで動作し、アプリを閉じている間に自動同期しません。
 
 ## CSV
 

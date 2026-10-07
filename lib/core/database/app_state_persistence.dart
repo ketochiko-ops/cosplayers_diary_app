@@ -21,8 +21,10 @@ class AppStatePersistence {
   final MasterDataStore masters;
   final DiaryStore diary;
   final LensStore lenses;
+  Future<void> Function(String source)? onSaved;
   Timer? _timer;
   bool _attached = false;
+  Future<void> _pendingSave = Future<void>.value();
 
   Future<void> load() async {
     final source = await store.readSetting(stateKey);
@@ -40,10 +42,20 @@ class AppStatePersistence {
 
   void _schedule() {
     _timer?.cancel();
-    _timer = Timer(const Duration(milliseconds: 250), save);
+    _timer = Timer(const Duration(milliseconds: 250), () {
+      unawaited(save());
+    });
   }
 
-  Future<void> save() => store.writeSetting(stateKey, exportJson());
+  Future<void> save() {
+    final source = exportJson();
+    final write = _pendingSave.catchError((Object _) {}).then((_) async {
+      await store.writeSetting(stateKey, source);
+      await onSaved?.call(source);
+    });
+    _pendingSave = write;
+    return write;
+  }
 
   String exportJson() => jsonEncode({
     'genres': [

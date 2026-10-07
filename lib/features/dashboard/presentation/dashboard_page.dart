@@ -2,16 +2,19 @@ import 'package:flutter/material.dart';
 
 import '../../contact_lenses/application/lens_store.dart';
 import '../../diary/application/diary_store.dart';
+import '../../master_data/application/master_data_store.dart';
 import '../domain/statistics_service.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({
     required this.diaryStore,
     required this.lensStore,
+    required this.masterStore,
     super.key,
   });
   final DiaryStore diaryStore;
   final LensStore lensStore;
+  final MasterDataStore masterStore;
 
   @override
   State<DashboardPage> createState() => _DashboardPageState();
@@ -21,9 +24,20 @@ class _DashboardPageState extends State<DashboardPage> {
   static const _service = StatisticsService();
   int? _year = DateTime.now().year;
 
+  String _characterName(String id) {
+    for (final character in widget.masterStore.characters) {
+      if (character.id == id) return character.name;
+    }
+    return '不明なキャラクター';
+  }
+
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-    animation: Listenable.merge([widget.diaryStore, widget.lensStore]),
+    animation: Listenable.merge([
+      widget.diaryStore,
+      widget.lensStore,
+      widget.masterStore,
+    ]),
     builder: (context, _) {
       final years =
           widget.diaryStore.entries
@@ -94,7 +108,7 @@ class _DashboardPageState extends State<DashboardPage> {
           for (final rank in stats.topCharacters)
             ListTile(
               dense: true,
-              title: Text(rank.id),
+              title: Text(_characterName(rank.id)),
               trailing: Text('${rank.count}回'),
             ),
         ],

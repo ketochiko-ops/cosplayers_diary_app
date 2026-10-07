@@ -1,10 +1,11 @@
 'use strict';
 
-const CACHE_NAME = 'cosplayers-diary-pwa-v1';
+const CACHE_NAME = 'cosplayers-diary-pwa-v2';
 const APP_SHELL = [
   './',
   'index.html',
   'flutter_bootstrap.js',
+  'project_storage.js',
   'flutter.js',
   'main.dart.js',
   'manifest.json',

@@ -27,9 +27,11 @@ flutter run -d <device-id>
 
 Android releaseは `flutter build appbundle --release`、iOS releaseはmacOS/Xcodeで `flutter build ipa --release` です。
 
-Web/PWAはローカル確認に `flutter run -d chrome`、リリース生成に `flutter build web --release --pwa-strategy=none` を使います。独自の `app_service_worker.js` を使うため、Flutter生成Service Workerは無効化します。サブパス配信では `--base-href /path/` を指定し、HTTPSで配信します。GitHub Pages用の自動配信は `.github/workflows/deploy-pwa.yml` です。
+Web/PWAはローカル確認に `flutter run -d chrome`、Vercel用リリース生成に `flutter build web --release --pwa-strategy=none --base-href /` を使います。独自の `app_service_worker.js` を使うため、Flutter生成Service Workerは無効化します。HTTPS配信先はVercelの `cosplayers-diary-app` プロジェクトです。
 
-ビルド後に `node tool/verify_pwa.mjs build/web` を実行すると、manifestのJSON、独自Service Worker登録、ローカルCanvasKit設定、プリキャッシュ対象ファイルの存在を検証できます。公開ワークフローでも同じ検証を実行します。
+Google Drive連携を公開する場合、サイト運営者がGoogle CloudのWeb OAuthクライアントを作成し、GitHub ActionsのRepository variable `GOOGLE_OAUTH_CLIENT_ID` を設定します。ワークフローは `--dart-define` で公開クライアントIDをビルドへ渡します。未設定時はGoogle Drive接続ボタンが無効です。利用者個別のOAuthクライアントIDを公開サイトで入力させる方式はGoogleのドメイン所有要件に合いません。
+
+ビルド後に `node tool/verify_pwa.mjs build/web` を実行すると、manifestのJSON、独自Service Worker登録、ローカルCanvasKit設定、プリキャッシュ対象ファイルの存在を検証できます。続けて `node tool/prepare_vercel_output.mjs build/web` を実行すると、Vercel CLIの `vercel deploy --prebuilt --prod` で公開できる成果物になります。`.github/workflows/deploy-pwa.yml` も同じ検証・変換を行います。
 
 ## 変更箇所マップ
 
@@ -42,6 +44,7 @@ Web/PWAはローカル確認に `flutter run -d chrome`、リリース生成に 
 | 写真保存 | `photo_service.dart`, `local_file_store.dart` | UI composition、メタデータ永続化、ZIP画像 |
 | SQLite | `schema.dart`, `app_database.dart` | version追加、DB結合テスト、JSON正本との関係 |
 | 自動保存/復元 | `app_state_persistence.dart`, `settings_store.dart` | SQLite/localStorage、全モデルの往復、古いJSON、dispose時保存 |
+| PWAプロジェクト保存 | `project_sync_controller.dart`, `project_storage*.dart`, `web/project_storage.js` | 外部更新競合、OAuth再接続、オフライン、ローカルキャッシュ |
 | PWA/配信 | `web/`, `.github/workflows/deploy-pwa.yml` | manifest、アイコン、base href、HTTPS、オフライン再起動 |
 | CSV | `csv_service.dart`, `backup_coordinator.dart` | README列定義、samples、参照検証、BOM |
 | ZIP | `backup_service.dart`, `backup_coordinator.dart` | 検証前非破壊、サイズ/パス/形式、設定UI |
@@ -116,7 +119,7 @@ test/
 - 日記フォームにカラコン購入/実物の選択、開封、使用解除がない。
 - マスター追加UIで所属ジャンル、専用衣装、メモ、カラコン候補を指定できない。
 - 単独CSVを選択して検証/preview/反映するUIとapplication処理がない。
-- ダッシュボードは一部統計だけを表示し、ランキング名をIDから解決しない。
+- ダッシュボードは一部統計だけを表示し、ジャンル/衣装ランキングや期限間近件数は未接続。
 
 ### データ整合性・堅牢性
 
@@ -126,12 +129,12 @@ test/
 - バックアップ作成は画像ファイルを収集せず、写真メタデータも状態に含まない。
 - ID生成は各クラス内の `DateTime.now().microsecondsSinceEpoch + sequence` で、共通ID生成器や注入可能なClockを使っていない。
 - `Clock` 抽象は存在するが、多くのUI/store/domain modelが `DateTime.now()` を直接使用する。
-- JSON自動保存中の例外をユーザーへ通知・再試行する仕組みがない。
+- SQLite/localStorage自体の自動保存例外をユーザーへ通知・再試行する仕組みがない。PWA外部保存の例外は設定画面に表示し、外部保存を停止する。
 
 ### 保守性
 
 - `csv`、`image_picker`、`path_provider`、`share_plus` は、少なくとも現行 `lib/` から一部または全部が未使用。
-- CIワークフローがない。
+- Vercelの自動公開にはGitHub ActionsのRepository secrets（`VERCEL_TOKEN`、`VERCEL_ORG_ID`、`VERCEL_PROJECT_ID`）が必要。
 - app state JSONのschema versionがpayload内にない。キー名だけが `app_state_v1`。
 - ストアのListが外部から直接変更可能で、変更時に通知や保存を迂回できる。
 
