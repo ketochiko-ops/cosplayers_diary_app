@@ -21,6 +21,7 @@ import '../features/calendar_sync/application/calendar_sync_controller.dart';
 import '../features/calendar_sync/infrastructure/calendar_transport.dart';
 import '../features/photos/application/photo_controller.dart';
 import '../features/photos/infrastructure/default_photo_files.dart';
+import '../features/settings/domain/calendar_week_start.dart';
 
 class CosplayDiaryApp extends StatelessWidget {
   const CosplayDiaryApp({this.settingsStore, this.projectStorage, super.key});
@@ -57,6 +58,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   ProjectSyncController? _projectSync;
   CalendarSyncController? _calendarSync;
   PhotoController? _photos;
+  CalendarWeekStart _weekStart = CalendarWeekStart.monday;
   int _projectVersion = 0;
   bool _loading = false;
   bool _setupOpen = false;
@@ -101,6 +103,9 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   }
 
   Future<void> _load() async {
+    _weekStart = CalendarWeekStart.fromSetting(
+      await widget.settingsStore!.readSetting(CalendarWeekStart.settingKey),
+    );
     _photos = PhotoController(
       persistence: _persistence!,
       files: _requiresProject
@@ -215,6 +220,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         store: _diaryStore,
         masterStore: _masterStore,
         photos: _photos,
+        weekStart: _weekStart,
       ),
       1 => DiaryListPage(
         store: _diaryStore,
@@ -233,6 +239,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         projectSync: _projectSync,
         calendarSync: _calendarSync,
         photoFiles: _photos?.files,
+        weekStart: _weekStart,
+        onWeekStartChanged: (value) => setState(() => _weekStart = value),
         onProjectLoaded: () {
           unawaited(_calendarSync?.disconnect(projectChanged: true));
           setState(() {});

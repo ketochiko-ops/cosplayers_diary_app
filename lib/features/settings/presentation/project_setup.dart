@@ -1,7 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
-
-import '../../backup/application/backup_coordinator.dart';
 
 import '../../../core/database/project_storage.dart';
 import '../../../core/database/project_sync_controller.dart';
@@ -64,10 +61,6 @@ class _ProjectSetupState extends State<ProjectSetup> {
               ),
           ] else
             const Text('このブラウザは外部フォルダへの自動保存に対応していません。'),
-          OutlinedButton(
-            onPressed: enabled ? _importJson : null,
-            child: const Text('旧JSON・画像同梱JSONから移行'),
-          ),
           const SizedBox(height: 16),
           const Text(
             'ブラウザ内へ自動保存（Safari対応）',
@@ -154,53 +147,6 @@ class _ProjectSetupState extends State<ProjectSetup> {
       if (mounted) widget.onReady?.call();
     } catch (error) {
       if (mounted) setState(() => _error = 'プロジェクトを使用できませんでした: $error');
-    } finally {
-      if (mounted) setState(() => _working = false);
-    }
-  }
-
-  Future<void> _importJson() async {
-    setState(() {
-      _working = true;
-      _error = null;
-    });
-    try {
-      final picked = await FilePicker.pickFile(
-        type: FileType.custom,
-        allowedExtensions: const ['json', 'zip'],
-      );
-      if (picked == null || !mounted) return;
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('移行するJSONを読み込みますか？'),
-          content: const Text(
-            '検証後に端末内の内容を置き換えます。旧JSONには画像本体は含まれません。読み込み後にプロジェクトフォルダを作成するか、ブラウザ保存を選んでください。',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('キャンセル'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('検証して読み込む'),
-            ),
-          ],
-        ),
-      );
-      if (confirmed != true) return;
-      final result = await BackupCoordinator(
-        widget.sync.persistence,
-        files: widget.sync.storage.assets,
-      ).restore(await picked.readAsBytes());
-      if (!result.isValid) throw FormatException(result.errors.join('\n'));
-      widget.sync.projectImported();
-      if (mounted) {
-        setState(() => _error = '読み込みました。空のフォルダへ作成するか、ブラウザ保存モードで開始してください。');
-      }
-    } catch (error) {
-      if (mounted) setState(() => _error = '移行できませんでした: $error');
     } finally {
       if (mounted) setState(() => _working = false);
     }

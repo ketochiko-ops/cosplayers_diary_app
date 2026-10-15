@@ -43,8 +43,7 @@ class ProjectSyncController extends ChangeNotifier {
     _preferredTarget = await settings.readSetting(preferenceKey);
     _browserMode = _preferredTarget == 'browser';
     if (_preferredTarget == 'localFile') {
-      _message =
-          'プロジェクトフォルダ方式へ変更しました。端末のデータを引き継いで空のフォルダに作成するか、旧JSONを読み込んで移行してください。';
+      _message = 'プロジェクトフォルダ方式へ変更しました。端末のデータを引き継いで保存場所を指定してください。';
     }
   }
 
@@ -100,10 +99,6 @@ class ProjectSyncController extends ChangeNotifier {
       _choose(() => storage.reconnectLocalFolder(requestPermission: true));
 
   void validate(String source) => persistence.validateJson(source);
-  void projectImported() {
-    _loadedProjectVersion++;
-    notifyListeners();
-  }
 
   Future<void> useProject(
     ProjectTarget target,

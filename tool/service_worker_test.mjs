@@ -57,7 +57,7 @@ test('activation keeps sibling projects and replaces only this scope cache', asy
   await env.lifecycle('install');
   await env.lifecycle('activate');
   assert.equal(env.stored.has(`${env.prefix}v4`), false);
-  assert.equal(env.stored.has(`${env.prefix}v7`), true);
+  assert.equal(env.stored.has(`${env.prefix}v8`), true);
   assert.equal(env.stored.has(sibling), true);
   assert.equal(env.stored.has('cosplayers-diary-pwa-v4'), true);
 });
@@ -77,7 +77,7 @@ test('offline navigation uses this scope index instead of a sibling cache', asyn
   const scope = 'https://user.github.io/cosplayers_diary_app/';
   const env = environment(scope);
   await env.lifecycle('install');
-  env.stored.get(`${env.prefix}v7`).set(`${scope}index.html`, 'own app');
+  env.stored.get(`${env.prefix}v8`).set(`${scope}index.html`, 'own app');
   env.stored.set('sibling', new Map([[`${scope}route`, 'wrong app']]));
   let pending;
   env.listeners.fetch({

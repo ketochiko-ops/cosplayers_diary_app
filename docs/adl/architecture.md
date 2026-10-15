@@ -63,6 +63,16 @@ main()
 
 `CosplayDiaryApp(settingsStore: null)` はテスト用の有効な構成です。この場合、初期ロード画面、永続化、設定のバックアップ操作は無効になります。
 
+### カレンダー表示設定と日記内マスター追加
+
+`CalendarWeekStart` は月曜・日曜の選択肢と初期値（月曜）を定義します。`AppShell` が起動時に `calendar_week_start` をSettingsStoreから読み、CalendarPageとSettingsPageへ渡します。設定画面は保存成功後にAppShellへ変更を通知します。表示設定は端末固有で、プロジェクトJSONには含めません。
+
+CalendarPageは開始曜日から日付のオフセットを算出し、44px（文字サイズ設定に応じ拡大）の行を持つSliverGridで表示します。月移動・日付選択・日記一覧を同じスクロール領域に置き、横長画面の余白と低い画面のオーバーフローを抑えます。
+
+DiaryFormは各マスター欄の追加ボタンから `showQuickAddMasterDialog` を開きます。空白名は確定せず、確定時はMasterDataStoreの通常メソッドで通知・自動保存します。キャラは現在のジャンル、専用衣装は現在のキャラに関連付け、汎用衣装も選べます。追加後はIDを日記の選択状態へ渡し、親の変更時は子の選択を解除します。フォームのkeyも選択IDで更新し、見た目と保存IDを一致させます。
+
+初回のProjectSetupに移行専用UIはありません。JSONの読み込みは設定画面の通常操作を使用します。
+
 ## 状態変更と自動保存
 
 ```text

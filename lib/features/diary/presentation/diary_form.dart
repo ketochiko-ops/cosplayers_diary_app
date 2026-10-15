@@ -10,6 +10,7 @@ import '../../photos/domain/photo_service.dart';
 import '../../master_data/application/master_data_store.dart';
 import '../../master_data/domain/master_models.dart';
 import '../../master_data/domain/master_service.dart';
+import '../../master_data/presentation/quick_add_master_dialog.dart';
 import '../application/diary_store.dart';
 import '../domain/diary_models.dart';
 
@@ -110,42 +111,104 @@ class _DiaryFormState extends State<DiaryForm> {
           ),
           if (_type == ActivityType.cosplay) ...[
             const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: genre == null ? null : _genreId,
-              decoration: const InputDecoration(labelText: 'ジャンル'),
-              items: [
-                for (final value in genres)
-                  DropdownMenuItem(value: value.id, child: Text(value.name)),
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    key: ValueKey('genre:$_genreId'),
+                    initialValue: genre == null ? null : _genreId,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'ジャンル'),
+                    items: [
+                      for (final value in genres)
+                        DropdownMenuItem(
+                          value: value.id,
+                          child: Text(value.name),
+                        ),
+                    ],
+                    onChanged: (value) => setState(() {
+                      _genreId = value;
+                      _characterId = _costumeId = null;
+                    }),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'ジャンルを追加',
+                  onPressed: _addGenre,
+                  icon: const Icon(Icons.add_circle_outline),
+                ),
               ],
-              onChanged: (value) => setState(() {
-                _genreId = value;
-                _characterId = _costumeId = null;
-              }),
             ),
             const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: character == null ? null : _characterId,
-              decoration: const InputDecoration(labelText: 'キャラクター'),
-              items: [
-                for (final value in characters)
-                  DropdownMenuItem(value: value.id, child: Text(value.name)),
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    key: ValueKey('character:$_genreId:$_characterId'),
+                    initialValue: character == null ? null : _characterId,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: 'キャラクター',
+                      helperText: genre == null ? '先にジャンルを選択・追加してください' : null,
+                    ),
+                    items: [
+                      for (final value in characters)
+                        DropdownMenuItem(
+                          value: value.id,
+                          child: Text(value.name),
+                        ),
+                    ],
+                    onChanged: genre == null
+                        ? null
+                        : (value) => setState(() {
+                            _characterId = value;
+                            _costumeId = null;
+                          }),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'キャラクターを追加',
+                  onPressed: genre == null ? null : () => _addCharacter(genre),
+                  icon: const Icon(Icons.add_circle_outline),
+                ),
               ],
-              onChanged: (value) => setState(() {
-                _characterId = value;
-                _costumeId = null;
-              }),
             ),
             const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: costumes.any((e) => e.id == _costumeId)
-                  ? _costumeId
-                  : null,
-              decoration: const InputDecoration(labelText: '衣装'),
-              items: [
-                for (final value in costumes)
-                  DropdownMenuItem(value: value.id, child: Text(value.name)),
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    key: ValueKey('costume:$_characterId:$_costumeId'),
+                    initialValue: costumes.any((e) => e.id == _costumeId)
+                        ? _costumeId
+                        : null,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      labelText: '衣装',
+                      helperText: character == null
+                          ? '先にキャラクターを選択・追加してください'
+                          : null,
+                    ),
+                    items: [
+                      for (final value in costumes)
+                        DropdownMenuItem(
+                          value: value.id,
+                          child: Text(value.name),
+                        ),
+                    ],
+                    onChanged: character == null
+                        ? null
+                        : (value) => setState(() => _costumeId = value),
+                  ),
+                ),
+                IconButton(
+                  tooltip: '衣装を追加',
+                  onPressed: character == null
+                      ? null
+                      : () => _addCostume(character),
+                  icon: const Icon(Icons.add_circle_outline),
+                ),
               ],
-              onChanged: (value) => setState(() => _costumeId = value),
             ),
           ],
           const SizedBox(height: 12),
@@ -222,6 +285,49 @@ class _DiaryFormState extends State<DiaryForm> {
       if (valueId == id) return value;
     }
     return null;
+  }
+
+  Future<void> _addGenre() async {
+    final result = await showQuickAddMasterDialog(
+      context: context,
+      title: 'ジャンルを追加',
+    );
+    if (result == null || !mounted) return;
+    final genre = widget.masterStore.addGenre(result.name);
+    setState(() {
+      _genreId = genre.id;
+      _characterId = _costumeId = null;
+    });
+  }
+
+  Future<void> _addCharacter(Genre genre) async {
+    final result = await showQuickAddMasterDialog(
+      context: context,
+      title: 'キャラクターを追加',
+      parentLabel: 'ジャンル: ${genre.name}',
+    );
+    if (result == null || !mounted) return;
+    final character = widget.masterStore.addCharacter(genre.id, result.name);
+    setState(() {
+      _characterId = character.id;
+      _costumeId = null;
+    });
+  }
+
+  Future<void> _addCostume(CosplayCharacter character) async {
+    final result = await showQuickAddMasterDialog(
+      context: context,
+      title: '衣装を追加',
+      parentLabel: 'キャラクター: ${character.name}',
+      allowGeneral: true,
+    );
+    if (result == null || !mounted) return;
+    final costume = widget.masterStore.addCostume(
+      result.name,
+      isGeneral: result.isGeneral,
+      characterId: character.id,
+    );
+    setState(() => _costumeId = costume.id);
   }
 
   Future<void> _pickDate() async {

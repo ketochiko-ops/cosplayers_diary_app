@@ -7,6 +7,7 @@ import '../../../core/database/project_sync_controller.dart';
 import '../../../core/database/settings_store.dart';
 import '../../backup/application/backup_coordinator.dart';
 import '../domain/backup_reminder.dart';
+import '../domain/calendar_week_start.dart';
 import '../../calendar_sync/application/calendar_sync_controller.dart';
 import '../../calendar_sync/presentation/calendar_sync_card.dart';
 import '../../../core/services/file_store.dart';
@@ -19,6 +20,8 @@ class SettingsPage extends StatefulWidget {
     this.calendarSync,
     this.onProjectLoaded,
     this.photoFiles,
+    this.weekStart = CalendarWeekStart.monday,
+    this.onWeekStartChanged,
     super.key,
   });
   final SettingsStore? settingsStore;
@@ -27,6 +30,8 @@ class SettingsPage extends StatefulWidget {
   final CalendarSyncController? calendarSync;
   final VoidCallback? onProjectLoaded;
   final FileStore? photoFiles;
+  final CalendarWeekStart weekStart;
+  final ValueChanged<CalendarWeekStart>? onWeekStartChanged;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -37,6 +42,8 @@ class _SettingsPageState extends State<SettingsPage> {
   DateTime? _lastBackup;
   String _photoMode = 'spaceSaving';
   bool _working = false;
+  bool _savingWeekStart = false;
+  int _weekStartVersion = 0;
 
   @override
   void initState() {
@@ -107,6 +114,22 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           const SizedBox(height: 24),
         ],
+        Text('カレンダー表示', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 8),
+        DropdownButtonFormField<CalendarWeekStart>(
+          key: ValueKey((widget.weekStart, _weekStartVersion)),
+          initialValue: widget.weekStart,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: '週の始まり'),
+          items: [
+            for (final value in CalendarWeekStart.values)
+              DropdownMenuItem(value: value, child: Text(value.label)),
+          ],
+          onChanged: _savingWeekStart || widget.onWeekStartChanged == null
+              ? null
+              : _changeWeekStart,
+        ),
+        const SizedBox(height: 24),
         if (widget.calendarSync != null) ...[
           CalendarSyncCard(sync: widget.calendarSync!),
           const SizedBox(height: 24),
@@ -172,6 +195,30 @@ class _SettingsPageState extends State<SettingsPage> {
       await widget.projectSync!.disconnect();
     } catch (error) {
       _message('保存方法を変更できませんでした: $error');
+    }
+  }
+
+  Future<void> _changeWeekStart(CalendarWeekStart? value) async {
+    if (value == null || _savingWeekStart) return;
+    setState(() => _savingWeekStart = true);
+    try {
+      await widget.settingsStore?.writeSetting(
+        CalendarWeekStart.settingKey,
+        value.name,
+      );
+      if (mounted) widget.onWeekStartChanged?.call(value);
+    } catch (error) {
+      if (mounted) {
+        _message('週の始まりを保存できませんでした: $error');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _savingWeekStart = false;
+          // Recreate the field even if a failed write completed before a frame.
+          _weekStartVersion++;
+        });
+      }
     }
   }
 

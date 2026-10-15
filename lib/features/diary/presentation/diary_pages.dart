@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../master_data/application/master_data_store.dart';
+import '../../settings/domain/calendar_week_start.dart';
 import '../application/diary_store.dart';
 import '../domain/diary_models.dart';
 import 'diary_form.dart';
@@ -58,18 +59,22 @@ class CalendarPage extends StatefulWidget {
     required this.store,
     required this.masterStore,
     this.photos,
+    this.initialMonth,
+    this.weekStart = CalendarWeekStart.monday,
     super.key,
   });
   final DiaryStore store;
   final MasterDataStore masterStore;
   final PhotoController? photos;
+  final DateTime? initialMonth;
+  final CalendarWeekStart weekStart;
 
   @override
   State<CalendarPage> createState() => _CalendarPageState();
 }
 
 class _CalendarPageState extends State<CalendarPage> {
-  late DateTime _month = DateTime(DateTime.now().year, DateTime.now().month);
+  late DateTime _month = widget.initialMonth ?? DateTime.now();
   DateTime? _selected;
 
   @override
@@ -77,45 +82,68 @@ class _CalendarPageState extends State<CalendarPage> {
     animation: widget.store,
     builder: (context, _) {
       final days = DateUtils.getDaysInMonth(_month.year, _month.month);
-      final offset = DateTime(_month.year, _month.month).weekday % 7;
+      final offset =
+          (DateTime(_month.year, _month.month).weekday -
+              widget.weekStart.weekday +
+              7) %
+          7;
+      final weekdays = List.generate(
+        7,
+        (index) => (widget.weekStart.weekday + index - 1) % 7 + 1,
+      );
+      final textScale = (MediaQuery.textScalerOf(context).scale(14) / 14).clamp(
+        1.0,
+        double.infinity,
+      );
       final selectedEntries = _selected == null
           ? <DiaryEntry>[]
           : widget.store.service.onDate(widget.store.entries, _selected!);
-      return Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              IconButton(
-                onPressed: () => setState(
-                  () => _month = DateTime(_month.year, _month.month - 1),
+      return CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                IconButton(
+                  tooltip: '前の月',
+                  onPressed: () => _changeMonth(-1),
+                  icon: const Icon(Icons.chevron_left),
                 ),
-                icon: const Icon(Icons.chevron_left),
-              ),
-              Text(
-                '${_month.year}年 ${_month.month}月',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              IconButton(
-                onPressed: () => setState(
-                  () => _month = DateTime(_month.year, _month.month + 1),
+                Text(
+                  '${_month.year}年 ${_month.month}月',
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
-                icon: const Icon(Icons.chevron_right),
+                IconButton(
+                  tooltip: '次の月',
+                  onPressed: () => _changeMonth(1),
+                  icon: const Icon(Icons.chevron_right),
+                ),
+              ],
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: SizedBox(
+              height: 24 * textScale,
+              child: Row(
+                children: [
+                  for (final weekday in weekdays)
+                    Expanded(
+                      child: Center(
+                        child: Text(
+                          const ['月', '火', '水', '木', '金', '土', '日'][weekday -
+                              1],
+                          style: TextStyle(color: _weekdayColor(weekday)),
+                        ),
+                      ),
+                    ),
+                ],
               ),
-            ],
+            ),
           ),
-          Row(
-            children: [
-              for (final label in const ['日', '月', '火', '水', '木', '金', '土'])
-                Expanded(child: Center(child: Text(label))),
-            ],
-          ),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          SliverGrid.builder(
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 7,
-              childAspectRatio: 1.6,
+              mainAxisExtent: 44 * textScale,
             ),
             itemCount: offset + days,
             itemBuilder: (context, index) {
@@ -128,68 +156,93 @@ class _CalendarPageState extends State<CalendarPage> {
               final count = widget.store.service
                   .onDate(widget.store.entries, date)
                   .length;
-              return InkWell(
-                onTap: () => setState(() => _selected = date),
-                child: Container(
-                  margin: const EdgeInsets.all(2),
-                  decoration: BoxDecoration(
-                    color: DateUtils.isSameDay(_selected, date)
-                        ? Theme.of(context).colorScheme.secondaryContainer
-                        : null,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text('${date.day}'),
-                      if (count > 0) Badge(label: Text('$count')),
-                    ],
+              return Semantics(
+                label: '${date.year}年${date.month}月${date.day}日、活動$count件',
+                selected: DateUtils.isSameDay(_selected, date),
+                child: InkWell(
+                  key: ValueKey(date),
+                  onTap: () => setState(() => _selected = date),
+                  child: Container(
+                    margin: const EdgeInsets.all(1),
+                    decoration: BoxDecoration(
+                      color: DateUtils.isSameDay(_selected, date)
+                          ? Theme.of(context).colorScheme.secondaryContainer
+                          : null,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          '${date.day}',
+                          style: TextStyle(color: _weekdayColor(date.weekday)),
+                        ),
+                        if (count > 0) Badge(label: Text('$count')),
+                      ],
+                    ),
                   ),
                 ),
               );
             },
           ),
-          const Divider(),
-          Expanded(
-            child: _selected == null
-                ? const Center(child: Text('日付を選択してください'))
-                : selectedEntries.isEmpty
-                ? const Center(child: Text('この日の活動はありません'))
-                : ListView(
-                    children: [
-                      for (final entry in selectedEntries)
-                        DiaryTile(
-                          entry: entry,
-                          store: widget.store,
-                          masterStore: widget.masterStore,
-                          photos: widget.photos,
-                        ),
-                    ],
-                  ),
-          ),
+          const SliverToBoxAdapter(child: Divider(height: 8)),
           if (_selected != null)
-            Padding(
-              padding: const EdgeInsets.all(8),
-              child: FilledButton.icon(
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => DiaryForm(
-                      store: widget.store,
-                      masterStore: widget.masterStore,
-                      photos: widget.photos,
-                      initialDate: _selected,
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+                child: FilledButton.icon(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => DiaryForm(
+                        store: widget.store,
+                        masterStore: widget.masterStore,
+                        photos: widget.photos,
+                        initialDate: _selected,
+                      ),
                     ),
                   ),
+                  icon: const Icon(Icons.add),
+                  label: const Text('この日に日記を追加'),
                 ),
-                icon: const Icon(Icons.add),
-                label: const Text('この日に日記を追加'),
+              ),
+            ),
+          if (_selected == null || selectedEntries.isEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Center(
+                  child: Text(
+                    _selected == null ? '日付を選択してください' : 'この日の活動はありません',
+                  ),
+                ),
+              ),
+            )
+          else
+            SliverList.builder(
+              itemCount: selectedEntries.length,
+              itemBuilder: (context, index) => DiaryTile(
+                entry: selectedEntries[index],
+                store: widget.store,
+                masterStore: widget.masterStore,
+                photos: widget.photos,
               ),
             ),
         ],
       );
     },
   );
+
+  void _changeMonth(int delta) => setState(() {
+    _month = DateTime(_month.year, _month.month + delta);
+    _selected = null;
+  });
+
+  Color? _weekdayColor(int weekday) => switch (weekday) {
+    DateTime.saturday => Colors.blue.shade700,
+    DateTime.sunday => Colors.red.shade700,
+    _ => null,
+  };
 }
 
 class DiaryTile extends StatelessWidget {
