@@ -20,7 +20,7 @@ class MasterDataService {
       .where(
         (e) =>
             !e.archived &&
-            (e.genreId == null || e.genreId == character.genreId) &&
+            (e.genreIds.isEmpty || e.genreIds.contains(character.genreId)) &&
             (e.isGeneral || e.characterIds.contains(character.id)),
       )
       .toList(growable: false);

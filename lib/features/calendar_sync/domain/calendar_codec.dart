@@ -55,8 +55,12 @@ class CalendarCodec {
     if (utf8.encode(memo).length > 16000) {
       throw const FormatException('カレンダーへ送るメモはUTF-8で16KB以内にしてください');
     }
-    String name(String key) =>
-        (masters[key] as List).firstOrNull?['name'] as String? ?? '未指定';
+    String name(String key) {
+      final value = (masters[key] as List).firstOrNull;
+      if (value == null) return '未指定';
+      return key == 'costumes' ? _costumeLabel(value) : value['name'] as String;
+    }
+
     final label = _label(row['activityType'] as String);
     final description =
         'コスプレ日記\n活動日: $date\n活動種別: $label\n作品: ${name('genres')}\nキャラクター: ${name('characters')}\n衣装: ${name('costumes')}$memoMarker$memo';
@@ -87,10 +91,18 @@ class CalendarCodec {
     final names = <String>[
       for (final key in ['genres', 'characters', 'costumes'])
         if ((masters[key] as List).isNotEmpty)
-          (masters[key] as List).first['name'] as String,
+          key == 'costumes'
+              ? _costumeLabel((masters[key] as List).first)
+              : (masters[key] as List).first['name'] as String,
     ];
     final label = _label(row['activityType'] as String);
     return '[$label] ${names.isEmpty ? 'コスプレ日記' : names.join(' / ')}';
+  }
+
+  String _costumeLabel(Map value) {
+    final name = value['name'] as String;
+    final tags = (value['tags'] as List? ?? const []).cast<String>();
+    return tags.isEmpty ? name : '$name（${tags.join('・')}）';
   }
 
   CalendarDiary decode(Map<String, dynamic> event, String calendarId) {
@@ -251,8 +263,10 @@ class CalendarCodec {
         'name',
         'isGeneral',
         'genreId',
+        'genreIds',
         'characterIds',
         'characterId',
+        'tags',
       ]),
     };
   }

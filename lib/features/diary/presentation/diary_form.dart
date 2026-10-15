@@ -205,7 +205,7 @@ class _DiaryFormState extends State<DiaryForm> {
                       for (final value in costumes)
                         DropdownMenuItem(
                           value: value.id,
-                          child: Text(value.name),
+                          child: Text(value.displayName),
                         ),
                     ],
                     onChanged: character == null
@@ -227,7 +227,7 @@ class _DiaryFormState extends State<DiaryForm> {
           TextField(
             controller: _calendarTitle,
             decoration: const InputDecoration(
-              labelText: '予定名（任意）',
+              labelText: 'イベント・予定名（任意）',
               helperText: '未入力なら活動種別・作品・キャラクターから自動作成します',
             ),
           ),
@@ -337,7 +337,7 @@ class _DiaryFormState extends State<DiaryForm> {
     final costume = widget.masterStore.addCostume(
       result.name,
       isGeneral: result.isGeneral,
-      genreId: character.genreId,
+      genreIds: [character.genreId],
       characterIds: result.isGeneral ? const [] : [character.id],
     );
     setState(() => _costumeId = costume.id);

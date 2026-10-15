@@ -72,8 +72,12 @@ void main() {
     });
     (state['costumes'] as List).single
       ..['genreId'] = 'g'
-      ..['characterIds'] = ['c', 'c2'];
+      ..['genreIds'] = ['g']
+      ..['characterIds'] = ['c', 'c2']
+      ..['tags'] = ['夏用', '青'];
     final event = codec.encode((state['diary'] as List).single, state);
+    expect(event['summary'], contains('制服（夏用・青）'));
+    expect(event['description'], contains('制服（夏用・青）'));
     final empty = calendarState();
     for (final key in ['diary', 'genres', 'characters', 'costumes']) {
       empty[key] = [];
@@ -81,7 +85,9 @@ void main() {
     final restored = codec.merge(empty, codec.decode(event, 'calendar-1'));
     expect((restored['characters'] as List).single['name'], 'キャラA');
     expect((restored['costumes'] as List).single['genreId'], 'g');
+    expect((restored['costumes'] as List).single['genreIds'], ['g']);
     expect((restored['costumes'] as List).single['characterIds'], ['c', 'c2']);
+    expect((restored['costumes'] as List).single['tags'], ['夏用', '青']);
     expect((restored['diary'] as List).single['lensInventoryId'], isNull);
   });
   test(

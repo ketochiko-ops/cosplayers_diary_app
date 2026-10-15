@@ -39,12 +39,14 @@ class MasterDataStore extends ChangeNotifier {
     String name, {
     required bool isGeneral,
     String? genreId,
+    List<String>? genreIds,
     String? characterId,
     List<String>? characterIds,
+    List<String> tags = const [],
     String memo = '',
   }) {
     final scope = _costumeScope(
-      genreId: genreId,
+      genreIds: genreIds ?? (genreId == null ? null : [genreId]),
       isGeneral: isGeneral,
       characterIds:
           characterIds ?? (characterId == null ? const [] : [characterId]),
@@ -53,8 +55,9 @@ class MasterDataStore extends ChangeNotifier {
       id: _id('costume'),
       name: _name(name),
       isGeneral: isGeneral,
-      genreId: scope.genreId,
+      genreIds: scope.genreIds,
       characterIds: scope.characterIds,
+      tags: _tags(tags),
       memo: memo.trim(),
     );
     costumes.add(value);
@@ -73,14 +76,16 @@ class MasterDataStore extends ChangeNotifier {
     required String name,
     required bool isGeneral,
     String? genreId,
+    List<String>? genreIds,
     String? characterId,
     List<String>? characterIds,
+    List<String>? tags,
   }) {
     final index = costumes.indexWhere((value) => value.id == id);
     if (index < 0) throw ArgumentError.value(id, 'id', '衣装が見つかりません');
     final current = costumes[index];
     final scope = _costumeScope(
-      genreId: genreId ?? current.genreId,
+      genreIds: genreIds ?? (genreId == null ? current.genreIds : [genreId]),
       isGeneral: isGeneral,
       characterIds:
           characterIds ??
@@ -91,16 +96,17 @@ class MasterDataStore extends ChangeNotifier {
       id: current.id,
       name: _name(name),
       isGeneral: isGeneral,
-      genreId: scope.genreId,
+      genreIds: scope.genreIds,
       characterIds: scope.characterIds,
+      tags: _tags(tags ?? current.tags),
       memo: current.memo,
       archived: current.archived,
     );
     notifyListeners();
   }
 
-  ({String? genreId, List<String> characterIds}) _costumeScope({
-    required String? genreId,
+  ({List<String> genreIds, List<String> characterIds}) _costumeScope({
+    required List<String>? genreIds,
     required bool isGeneral,
     required List<String> characterIds,
     Costume? current,
@@ -112,29 +118,50 @@ class MasterDataStore extends ChangeNotifier {
     if (ids.toSet().length != ids.length) {
       throw ArgumentError.value(ids, 'characterIds', '同じキャラクターを重複登録できません');
     }
-    final resolvedGenre =
-        genreId ??
-        (ids.isEmpty
-            ? null
-            : characters.where((e) => e.id == ids.first).firstOrNull?.genreId);
-    if (resolvedGenre != null && resolvedGenre != current?.genreId) {
-      _requireActiveGenre(resolvedGenre);
+    final resolvedGenres =
+        genreIds?.toList() ??
+        [
+          if (ids.isNotEmpty)
+            ...characters
+                .where((e) => ids.contains(e.id))
+                .map((e) => e.genreId),
+        ];
+    if (resolvedGenres.toSet().length != resolvedGenres.length &&
+        genreIds != null) {
+      throw ArgumentError.value(resolvedGenres, 'genreIds', '同じジャンルを重複登録できません');
+    }
+    final uniqueGenres = resolvedGenres.toSet().toList()..sort();
+    for (final id in uniqueGenres) {
+      if (current?.genreIds.contains(id) != true) _requireActiveGenre(id);
     }
     for (final id in ids) {
       final character = characters.where((e) => e.id == id).firstOrNull;
       if (character == null ||
           (character.archived &&
               !(current?.characterIds.contains(id) ?? false)) ||
-          character.genreId != resolvedGenre) {
+          (uniqueGenres.isNotEmpty &&
+              !uniqueGenres.contains(character.genreId))) {
         throw ArgumentError.value(
           id,
           'characterIds',
-          '同じジャンルの有効なキャラクターを選択してください',
+          '選択したジャンルの有効なキャラクターを選択してください',
         );
       }
     }
     ids.sort();
-    return (genreId: resolvedGenre, characterIds: List.unmodifiable(ids));
+    return (
+      genreIds: List.unmodifiable(uniqueGenres),
+      characterIds: List.unmodifiable(ids),
+    );
+  }
+
+  List<String> _tags(List<String> values) {
+    final result = values
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList();
+    return List.unmodifiable(result);
   }
 
   String _name(String value) {

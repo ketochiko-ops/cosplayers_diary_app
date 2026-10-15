@@ -17,8 +17,9 @@ typedef _MasterInput = ({
   String name,
   String? parentId,
   bool isGeneral,
-  String? genreId,
+  List<String> genreIds,
   List<String> characterIds,
+  List<String> tags,
 });
 
 class MasterDataPage extends StatefulWidget {
@@ -95,9 +96,9 @@ class _MasterDataPageState extends State<MasterDataPage>
                   entries: [
                     for (final costume in costumes)
                       _MasterRow(
-                        name: costume.name,
+                        name: costume.displayName,
                         detail:
-                            '${widget.store.genres.where((e) => e.id == costume.genreId).firstOrNull?.name ?? '全ジャンル（旧データ）'} · ${costume.isGeneral ? '汎用衣装' : '固有衣装 · ${costume.characterIds.map((id) => widget.store.characters.where((e) => e.id == id).firstOrNull?.name ?? '不明なキャラクター').join('、')}'}',
+                            '${costume.genreIds.isEmpty ? '全ジャンル' : costume.genreIds.map((id) => widget.store.genres.where((e) => e.id == id).firstOrNull?.name ?? '不明なジャンル').join('、')} · ${costume.isGeneral ? '汎用衣装' : '固有衣装 · ${costume.characterIds.map((id) => widget.store.characters.where((e) => e.id == id).firstOrNull?.name ?? '不明なキャラクター').join('、')}'}',
                         onEdit: () =>
                             _edit(_MasterKind.costume, costume: costume),
                         onArchive: () =>
@@ -138,8 +139,9 @@ class _MasterDataPageState extends State<MasterDataPage>
           widget.store.addCostume(
             input.name,
             isGeneral: input.isGeneral,
-            genreId: input.genreId,
+            genreIds: input.genreIds,
             characterIds: input.characterIds,
+            tags: input.tags,
           );
       }
     } on ArgumentError catch (error) {
@@ -175,8 +177,9 @@ class _MasterDataPageState extends State<MasterDataPage>
             costume!.id,
             name: input.name,
             isGeneral: input.isGeneral,
-            genreId: input.genreId,
+            genreIds: input.genreIds,
             characterIds: input.characterIds,
+            tags: input.tags,
           );
       }
     } on ArgumentError catch (error) {
@@ -262,9 +265,12 @@ class _MasterEditorDialogState extends State<_MasterEditorDialog> {
   late final TextEditingController _name = TextEditingController(
     text: widget.genre?.name ?? widget.character?.name ?? widget.costume?.name,
   );
+  late final TextEditingController _tags = TextEditingController(
+    text: widget.costume?.tags.join('、') ?? '',
+  );
   late bool _isGeneral = widget.costume?.isGeneral ?? true;
   late String? _parentId = widget.character?.genreId;
-  late String? _costumeGenreId = widget.costume?.genreId;
+  late final Set<String> _selectedGenres = {...?widget.costume?.genreIds};
   late final Set<String> _selectedCharacters = {
     ...?widget.costume?.characterIds,
   };
@@ -273,6 +279,7 @@ class _MasterEditorDialogState extends State<_MasterEditorDialog> {
   @override
   void dispose() {
     _name.dispose();
+    _tags.dispose();
     super.dispose();
   }
 
@@ -283,12 +290,13 @@ class _MasterEditorDialogState extends State<_MasterEditorDialog> {
         widget.character != null ||
         widget.costume != null;
     final genres = widget.store.genres
-        .where((e) => !e.archived || e.id == widget.costume?.genreId)
+        .where((e) => !e.archived || _selectedGenres.contains(e.id))
         .toList();
     final characters = widget.store.characters
         .where(
           (e) =>
-              e.genreId == _costumeGenreId &&
+              (_selectedGenres.isEmpty ||
+                  _selectedGenres.contains(e.genreId)) &&
               (!e.archived || _selectedCharacters.contains(e.id)),
         )
         .toList();
@@ -341,25 +349,44 @@ class _MasterEditorDialogState extends State<_MasterEditorDialog> {
                 ],
                 if (widget.kind == _MasterKind.costume) ...[
                   const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    key: ValueKey('costume-genre-$_costumeGenreId'),
-                    initialValue: _costumeGenreId,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'ジャンル'),
-                    items: [
-                      for (final genre in genres)
-                        DropdownMenuItem(
-                          value: genre.id,
-                          child: Text(genre.name),
-                        ),
-                    ],
-                    onChanged: (value) => setState(() {
-                      if (_costumeGenreId != value) _selectedCharacters.clear();
-                      _costumeGenreId = value;
-                    }),
-                    validator: (value) =>
-                        value == null ? 'ジャンルを選択してください' : null,
+                  TextFormField(
+                    controller: _tags,
+                    decoration: const InputDecoration(
+                      labelText: 'タグ（カンマ区切り）',
+                      hintText: '例: メイド服、ロング丈',
+                    ),
                   ),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'ジャンル（未選択なら全ジャンル）',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                  ),
+                  for (final genre in genres)
+                    CheckboxListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(genre.name),
+                      value: _selectedGenres.contains(genre.id),
+                      onChanged: (selected) => setState(() {
+                        if (selected == true) {
+                          _selectedGenres.add(genre.id);
+                        } else {
+                          _selectedGenres.remove(genre.id);
+                        }
+                        if (_selectedGenres.isNotEmpty) {
+                          _selectedCharacters.removeWhere((id) {
+                            final character = widget.store.characters
+                                .where((e) => e.id == id)
+                                .firstOrNull;
+                            return character == null ||
+                                !_selectedGenres.contains(character.genreId);
+                          });
+                        }
+                      }),
+                    ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<bool>(
                     initialValue: _isGeneral,
@@ -379,10 +406,7 @@ class _MasterEditorDialogState extends State<_MasterEditorDialog> {
                         style: Theme.of(context).textTheme.titleSmall,
                       ),
                     ),
-                    if (_costumeGenreId == null)
-                      const Text('先にジャンルを選択してください')
-                    else if (characters.isEmpty)
-                      const Text('このジャンルにキャラクターを登録してください'),
+                    if (characters.isEmpty) const Text('対象にできるキャラクターを登録してください'),
                     for (final character in characters)
                       CheckboxListTile(
                         dense: true,
@@ -430,10 +454,14 @@ class _MasterEditorDialogState extends State<_MasterEditorDialog> {
               name: _name.text.trim(),
               parentId: _parentId,
               isGeneral: _isGeneral,
-              genreId: _costumeGenreId,
+              genreIds: _selectedGenres.toList(),
               characterIds: _isGeneral
                   ? <String>[]
                   : _selectedCharacters.toList(),
+              tags: _tags.text
+                  .replaceAll('、', ',')
+                  .replaceAll('，', ',')
+                  .split(','),
             ));
           },
           child: Text(editing ? '保存' : '追加'),

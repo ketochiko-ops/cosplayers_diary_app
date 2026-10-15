@@ -42,8 +42,9 @@ void main() {
     final settings = _MemorySettingsStore();
     final masters = MasterDataStore();
     final genre = masters.addGenre('ウマ娘');
+    final otherGenre = masters.addGenre('別作品');
     final character = masters.addCharacter(genre.id, 'スペシャルウィーク');
-    final other = masters.addCharacter(genre.id, 'トウカイテイオー');
+    final other = masters.addCharacter(otherGenre.id, '別作品のキャラ');
     final costume = masters.addCostume('勝負服', isGeneral: true);
     final diary = DiaryStore()
       ..save(
@@ -62,8 +63,9 @@ void main() {
       costume.id,
       name: '勝負服',
       isGeneral: false,
-      genreId: genre.id,
+      genreIds: [genre.id, otherGenre.id],
       characterIds: [character.id, other.id],
+      tags: ['レース用', '赤'],
     );
     await AppStatePersistence(
       store: settings,
@@ -80,17 +82,18 @@ void main() {
       diary: restoredDiary,
       lenses: LensStore(),
     ).load();
-    expect(restoredMasters.genres.single.id, genre.id);
-    expect(restoredMasters.genres.single.name, 'ウマ娘 プリティーダービー');
+    expect(restoredMasters.genres.first.id, genre.id);
+    expect(restoredMasters.genres.first.name, 'ウマ娘 プリティーダービー');
     expect(restoredMasters.characters.first.id, character.id);
     expect(restoredMasters.characters.first.name, 'スペシャルウィーク改');
     expect(restoredMasters.costumes.single.id, costume.id);
     expect(restoredMasters.costumes.single.isGeneral, isFalse);
-    expect(restoredMasters.costumes.single.genreId, genre.id);
+    expect(restoredMasters.costumes.single.genreIds, [genre.id, otherGenre.id]);
     expect(restoredMasters.costumes.single.characterIds, [
       character.id,
       other.id,
     ]);
+    expect(restoredMasters.costumes.single.tags, ['レース用', '赤']);
     expect(restoredDiary.entries.single.costumeId, costume.id);
   });
 
@@ -112,11 +115,15 @@ void main() {
     final old = jsonDecode(persistence.exportJson()) as Map<String, dynamic>;
     final row = old['costumes'][0] as Map<String, dynamic>;
     row.remove('genreId');
+    row.remove('genreIds');
     row.remove('characterIds');
+    row.remove('tags');
     persistence.restoreJson(jsonEncode(old));
     expect(masters.costumes.single.id, costume.id);
     expect(masters.costumes.single.genreId, genre.id);
+    expect(masters.costumes.single.genreIds, [genre.id]);
     expect(masters.costumes.single.characterIds, [character.id]);
+    expect(masters.costumes.single.tags, isEmpty);
   });
 }
 

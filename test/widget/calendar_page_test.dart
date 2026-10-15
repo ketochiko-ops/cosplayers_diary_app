@@ -156,6 +156,61 @@ void main() {
   });
 
   testWidgets(
+    'calendar and diary list show event, character and tagged costume',
+    (tester) async {
+      final masters = MasterDataStore();
+      final genre = masters.addGenre('作品');
+      final character = masters.addCharacter(genre.id, '主人公');
+      final costume = masters.addCostume(
+        'メイド服',
+        isGeneral: false,
+        genreIds: [genre.id],
+        characterIds: [character.id],
+        tags: ['黒', 'ロング'],
+      );
+      final diary = DiaryStore()
+        ..save(
+          DiaryEntry(
+            id: 'event',
+            activityDate: DateTime(2026, 10, 15),
+            activityType: ActivityType.cosplay,
+            genreId: genre.id,
+            characterId: character.id,
+            costumeId: costume.id,
+            calendarTitle: '秋の撮影会',
+          ),
+        );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CalendarPage(
+              store: diary,
+              masterStore: masters,
+              initialMonth: DateTime(2026, 10),
+            ),
+          ),
+        ),
+      );
+      expect(find.text('秋の撮影会'), findsOneWidget);
+      await tester.tap(find.byKey(ValueKey(DateTime(2026, 10, 15))));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('イベント: 秋の撮影会'), findsOneWidget);
+      expect(find.textContaining('キャラ: 主人公'), findsOneWidget);
+      expect(find.textContaining('衣装: メイド服（黒・ロング）'), findsOneWidget);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: DiaryListPage(store: diary, masterStore: masters),
+        ),
+      );
+      expect(find.textContaining('イベント: 秋の撮影会'), findsOneWidget);
+      expect(find.textContaining('キャラ: 主人公'), findsOneWidget);
+      expect(find.textContaining('衣装: メイド服（黒・ロング）'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'six-week calendar scrolls on a short phone with larger text and activity badges',
     (tester) async {
       tester.view.physicalSize = const Size(390, 300);

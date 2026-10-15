@@ -108,8 +108,10 @@ class AppStatePersistence {
           'name': e.name,
           'isGeneral': e.isGeneral,
           'genreId': e.genreId,
+          'genreIds': e.genreIds,
           'characterIds': e.characterIds,
           'characterId': e.characterId,
+          'tags': e.tags,
           'memo': e.memo,
           'archived': e.archived,
         },
@@ -272,8 +274,10 @@ class AppStatePersistence {
                     .where((e) => e.id == raw['characterId'])
                     .firstOrNull
                     ?.genreId,
+            genreIds: (raw['genreIds'] as List?)?.cast<String>(),
             characterIds: (raw['characterIds'] as List?)?.cast<String>(),
             characterId: raw['characterId'] as String?,
+            tags: (raw['tags'] as List? ?? const []).cast<String>(),
             memo: raw['memo'] as String? ?? '',
             archived: raw['archived'] as bool? ?? false,
           ),

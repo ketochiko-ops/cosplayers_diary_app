@@ -83,4 +83,57 @@ void main() {
     );
     expect(store.costumes, isEmpty);
   });
+
+  test('multi-genre, unrestricted, and tagged costumes remain distinct', () {
+    final store = MasterDataStore();
+    final a = store.addGenre('作品A');
+    final b = store.addGenre('作品B');
+    final c = store.addGenre('作品C');
+    final aCharacter = store.addCharacter(a.id, 'Aのキャラ');
+    final bCharacter = store.addCharacter(b.id, 'Bのキャラ');
+    final cCharacter = store.addCharacter(c.id, 'Cのキャラ');
+    final shared = store.addCostume(
+      'メイド服',
+      isGeneral: true,
+      genreIds: [a.id, b.id],
+      tags: ['黒', ' ロング ', '黒', ''],
+    );
+    expect(shared.tags, ['黒', 'ロング']);
+    expect(shared.displayName, 'メイド服（黒・ロング）');
+    expect(service.costumesForCharacter(store.costumes, aCharacter), [shared]);
+    expect(service.costumesForCharacter(store.costumes, bCharacter), [shared]);
+    expect(service.costumesForCharacter(store.costumes, cCharacter), isEmpty);
+
+    store.updateCostume(
+      shared.id,
+      name: 'メイド服',
+      isGeneral: true,
+      genreIds: [],
+      characterIds: [],
+      tags: ['白', 'ショート'],
+    );
+    expect(store.costumes.single.genreIds, isEmpty);
+    expect(store.costumes.single.tags, ['白', 'ショート']);
+    expect(
+      service.costumesForCharacter(store.costumes, cCharacter).single.id,
+      shared.id,
+    );
+
+    final specific = store.addCostume(
+      '浴衣',
+      isGeneral: false,
+      genreIds: [],
+      characterIds: [aCharacter.id, bCharacter.id],
+    );
+    expect(specific.genreIds, isEmpty);
+    expect(
+      service.costumesForCharacter(store.costumes, aCharacter).last.id,
+      specific.id,
+    );
+    expect(
+      service.costumesForCharacter(store.costumes, bCharacter).last.id,
+      specific.id,
+    );
+    expect(service.costumesForCharacter(store.costumes, cCharacter).length, 1);
+  });
 }

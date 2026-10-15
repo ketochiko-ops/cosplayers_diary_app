@@ -53,14 +53,20 @@ class Costume {
     required this.id,
     required this.name,
     required this.isGeneral,
-    this.genreId,
+    String? genreId,
+    List<String>? genreIds,
     String? characterId,
     List<String>? characterIds,
+    List<String> tags = const [],
     this.memo = '',
     this.archived = false,
-  }) : characterIds = List.unmodifiable(
+  }) : genreIds = List.unmodifiable(
+         genreIds ?? (genreId == null ? const [] : [genreId]),
+       ),
+       characterIds = List.unmodifiable(
          characterIds ?? (characterId == null ? const [] : [characterId]),
        ),
+       tags = List.unmodifiable(tags),
        assert(
          isGeneral ||
              characterId != null ||
@@ -70,12 +76,15 @@ class Costume {
   final String name;
   final bool isGeneral;
 
-  /// Null only for legacy costumes that were not scoped to a genre.
-  final String? genreId;
+  /// An empty list means the costume can be used in any genre.
+  final List<String> genreIds;
   final List<String> characterIds;
+  final List<String> tags;
 
-  /// Legacy single-owner view, used only when reading older integrations.
+  /// Legacy single-value views for older project/calendar data.
+  String? get genreId => genreIds.firstOrNull;
   String? get characterId => characterIds.firstOrNull;
+  String get displayName => tags.isEmpty ? name : '$name（${tags.join('・')}）';
   final String memo;
   final bool archived;
 
@@ -83,8 +92,9 @@ class Costume {
     id: id,
     name: name ?? this.name,
     isGeneral: isGeneral,
-    genreId: genreId,
+    genreIds: genreIds,
     characterIds: characterIds,
+    tags: tags,
     memo: memo ?? this.memo,
     archived: archived ?? this.archived,
   );

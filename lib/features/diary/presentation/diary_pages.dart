@@ -7,6 +7,30 @@ import '../domain/diary_models.dart';
 import 'diary_form.dart';
 import '../../photos/application/photo_controller.dart';
 
+String _characterLabel(DiaryEntry entry, MasterDataStore masters) =>
+    masters.characters
+        .where((value) => value.id == entry.characterId)
+        .firstOrNull
+        ?.name ??
+    '不明なキャラクター';
+
+String _costumeLabel(DiaryEntry entry, MasterDataStore masters) =>
+    masters.costumes
+        .where((value) => value.id == entry.costumeId)
+        .firstOrNull
+        ?.displayName ??
+    '不明な衣装';
+
+String _dayPreview(DiaryEntry entry, MasterDataStore masters) {
+  final title = entry.calendarTitle.trim();
+  if (title.isNotEmpty) return title;
+  if (entry.activityType == ActivityType.cosplay) {
+    return _characterLabel(entry, masters);
+  }
+  final firstMemoLine = entry.memo.trim().split('\n').first.trim();
+  return firstMemoLine.isNotEmpty ? firstMemoLine : entry.activityType.label;
+}
+
 class DiaryListPage extends StatelessWidget {
   const DiaryListPage({
     required this.store,
@@ -20,7 +44,7 @@ class DiaryListPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-    animation: store,
+    animation: Listenable.merge([store, masterStore]),
     builder: (context, _) => Scaffold(
       body: store.entries.isEmpty
           ? const Center(child: Text('日記はまだありません'))
@@ -79,7 +103,7 @@ class _CalendarPageState extends State<CalendarPage> {
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-    animation: widget.store,
+    animation: Listenable.merge([widget.store, widget.masterStore]),
     builder: (context, _) {
       final days = DateUtils.getDaysInMonth(_month.year, _month.month);
       final offset =
@@ -179,11 +203,17 @@ class _CalendarPageState extends State<CalendarPage> {
                 _month.month,
                 index - offset + 1,
               );
-              final count = widget.store.service
-                  .onDate(widget.store.entries, date)
-                  .length;
+              final dayEntries = widget.store.service.onDate(
+                widget.store.entries,
+                date,
+              );
+              final count = dayEntries.length;
+              final preview = count == 0
+                  ? ''
+                  : _dayPreview(dayEntries.first, widget.masterStore);
               return Semantics(
-                label: '${date.year}年${date.month}月${date.day}日、活動$count件',
+                label:
+                    '${date.year}年${date.month}月${date.day}日、活動$count件${count == 0 ? '' : '、$preview'}',
                 selected: DateUtils.isSameDay(_selected, date),
                 child: InkWell(
                   key: ValueKey(date),
@@ -203,7 +233,16 @@ class _CalendarPageState extends State<CalendarPage> {
                           '${date.day}',
                           style: TextStyle(color: _weekdayColor(date.weekday)),
                         ),
-                        if (count > 0) Badge(label: Text('$count')),
+                        if (count > 0)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 2),
+                            child: Text(
+                              count > 1 ? '$count件 $preview' : preview,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 10),
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -287,36 +326,50 @@ class DiaryTile extends StatelessWidget {
   final PhotoController? photos;
 
   @override
-  Widget build(BuildContext context) => ListTile(
-    leading: CircleAvatar(child: Icon(_icon(entry.activityType))),
-    title: Text(
-      '${entry.activityDate.year}/${entry.activityDate.month}/${entry.activityDate.day}  ${entry.activityType.label}',
-    ),
-    subtitle: entry.memo.isEmpty
-        ? null
-        : Text(entry.memo, maxLines: 1, overflow: TextOverflow.ellipsis),
-    onTap: () => Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => DiaryForm(
-          store: store,
-          masterStore: masterStore,
-          entry: entry,
-          photos: photos,
+  Widget build(BuildContext context) {
+    final details = <String>[
+      if (entry.calendarTitle.trim().isNotEmpty)
+        'イベント: ${entry.calendarTitle.trim()}',
+      if (entry.activityType == ActivityType.cosplay)
+        'キャラ: ${_characterLabel(entry, masterStore)}  /  衣装: ${_costumeLabel(entry, masterStore)}',
+      if (entry.memo.trim().isNotEmpty) 'メモ: ${entry.memo.trim()}',
+    ];
+    return ListTile(
+      leading: CircleAvatar(child: Icon(_icon(entry.activityType))),
+      title: Text(
+        '${entry.activityDate.year}/${entry.activityDate.month}/${entry.activityDate.day}  ${entry.activityType.label}',
+      ),
+      isThreeLine: details.length > 1,
+      subtitle: details.isEmpty
+          ? null
+          : Text(
+              details.join('\n'),
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
+            ),
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => DiaryForm(
+            store: store,
+            masterStore: masterStore,
+            entry: entry,
+            photos: photos,
+          ),
         ),
       ),
-    ),
-    trailing: PopupMenuButton<String>(
-      onSelected: (value) {
-        if (value == 'delete') store.delete(entry.id);
-        if (value == 'duplicate') store.duplicate(entry, DateTime.now());
-      },
-      itemBuilder: (_) => const [
-        PopupMenuItem(value: 'duplicate', child: Text('複製（今日）')),
-        PopupMenuItem(value: 'delete', child: Text('削除')),
-      ],
-    ),
-  );
+      trailing: PopupMenuButton<String>(
+        onSelected: (value) {
+          if (value == 'delete') store.delete(entry.id);
+          if (value == 'duplicate') store.duplicate(entry, DateTime.now());
+        },
+        itemBuilder: (_) => const [
+          PopupMenuItem(value: 'duplicate', child: Text('複製（今日）')),
+          PopupMenuItem(value: 'delete', child: Text('削除')),
+        ],
+      ),
+    );
+  }
 
   IconData _icon(ActivityType type) => switch (type) {
     ActivityType.cosplay => Icons.auto_awesome,
