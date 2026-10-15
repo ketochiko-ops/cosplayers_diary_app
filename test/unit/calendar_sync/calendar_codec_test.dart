@@ -127,4 +127,22 @@ void main() {
       ),
     );
   });
+  test('event master travels with the diary and names the calendar event', () {
+    final state = calendarState()
+      ..['events'] = [
+        {'id': 'event-1', 'name': 'アコスタ池袋'},
+      ];
+    final row = (state['diary'] as List).single as Map<String, dynamic>;
+    row['eventId'] = 'event-1';
+    final event = codec.encode(row, state);
+    expect(event['summary'], 'アコスタ池袋');
+    expect(event['description'], contains('参加イベント: アコスタ池袋'));
+    final imported = codec.decode(event, 'calendar-1');
+    expect(imported.entry['eventId'], 'event-1');
+    final empty = calendarState()
+      ..['events'] = []
+      ..['diary'] = [];
+    final restored = codec.merge(empty, imported);
+    expect((restored['events'] as List).single['name'], 'アコスタ池袋');
+  });
 }

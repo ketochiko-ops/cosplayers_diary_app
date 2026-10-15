@@ -327,4 +327,40 @@ void main() {
     expect(diary.entries, isEmpty);
     expect(find.text('日記はまだありません'), findsOneWidget);
   });
+
+  testWidgets('recurring event name appears on calendar and diary list', (
+    tester,
+  ) async {
+    final masters = MasterDataStore();
+    final event = masters.addEvent('アコスタ池袋');
+    final diary = DiaryStore()
+      ..save(
+        DiaryEntry(
+          id: 'visit',
+          activityDate: DateTime(2026, 10, 15),
+          activityType: ActivityType.other,
+          eventId: event.id,
+        ),
+      );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CalendarPage(
+            store: diary,
+            masterStore: masters,
+            initialMonth: DateTime(2026, 10),
+          ),
+        ),
+      ),
+    );
+    expect(find.text('アコスタ池袋'), findsOneWidget);
+    await tester.tap(find.byKey(ValueKey(DateTime(2026, 10, 15))));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('参加イベント: アコスタ池袋'), findsOneWidget);
+    masters.archiveEvent(event.id);
+    masters.deleteArchivedEvent(event.id);
+    await tester.pumpAndSettle();
+    expect(find.text('⚠ 取得できませんでした'), findsOneWidget);
+    expect(find.textContaining('参加イベント: 取得できませんでした'), findsOneWidget);
+  });
 }

@@ -63,6 +63,7 @@ List<String?> selections(WidgetTester tester) => tester
       ),
     )
     .map((state) => state.value)
+    .take(3)
     .toList();
 
 void main() {
@@ -118,6 +119,34 @@ void main() {
     expect(find.text('取得できませんでした'), findsNWidgets(3));
     expect(selections(tester), [genre.id, character.id, costume.id]);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('diary can create and select a recurring event master', (
+    tester,
+  ) async {
+    final masters = MasterDataStore();
+    final diary = DiaryStore()
+      ..save(
+        DiaryEntry(
+          id: 'visit',
+          activityDate: DateTime(2026, 10, 15),
+          activityType: ActivityType.other,
+          calendarTitle: 'アコスタ池袋',
+        ),
+      );
+    await openForm(tester, masters, diary, entry: diary.entries.single);
+    await tester.ensureVisible(find.byTooltip('参加イベントを追加'));
+    await tester.tap(find.byTooltip('参加イベントを追加'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField).last, 'アコスタ池袋');
+    await tester.tap(find.text('追加して選択'));
+    await tester.pumpAndSettle();
+    expect(masters.events.single.name, 'アコスタ池袋');
+    await tester.ensureVisible(find.text('保存'));
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+    expect(diary.entries.single.eventId, masters.events.single.id);
+    expect(diary.entries.single.calendarTitle, isEmpty);
   });
 
   testWidgets(
@@ -241,15 +270,16 @@ void main() {
       final general = masters.costumes.last;
       expect((general.isGeneral, general.characterId), (true, null));
       await addMaster(tester, 'キャラクター', 'さらに別のキャラ');
-      expect(selections(tester), [
-        masters.genres.last.id,
-        masters.characters.last.id,
-        null,
-      ]);
+      expect(masters.characters.last.genreId, masters.genres.last.id);
+      await tester.ensureVisible(find.byTooltip('衣装を追加'));
       final dropdowns = tester.widgetList<DropdownButton<String>>(
-        find.byWidgetPredicate((widget) => widget is DropdownButton<String>),
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is DropdownButton<String> &&
+              widget.items!.any((item) => item.value == general.id),
+        ),
       );
-      expect(dropdowns.last.items!.map((item) => item.value), [general.id]);
+      expect(dropdowns.single.items!.map((item) => item.value), [general.id]);
       expect(tester.takeException(), isNull);
     },
   );

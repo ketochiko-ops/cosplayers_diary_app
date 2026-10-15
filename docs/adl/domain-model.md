@@ -13,7 +13,7 @@ LensProduct 1 ── * LensPurchase 1 ── * LensInventory 1 ── * LensUsag
                                                           │
 DiaryEntry 1 ─────────────────────────────────────────────┘
 
-DiaryEntry ── Genre / CosplayCharacter / Costume / PhotoRecord / LensInventory
+DiaryEntry ── ParticipationEvent / Genre / CosplayCharacter / Costume / PhotoRecord / LensInventory
               （すべてID参照。未接続の参照を含む）
 ```
 
@@ -24,6 +24,7 @@ DiaryEntry ── Genre / CosplayCharacter / Costume / PhotoRecord / LensInvento
 ファイル: `features/master_data/domain/`
 
 - `Genre`: `id`, `name`, `memo`, `archived`
+- `ParticipationEvent`: 繰り返し開催される参加イベントの安定ID、名前、メモ、アーカイブ状態
 - `CosplayCharacter`: 必須 `genreId`、任意のカラコン候補と既定値、`archived`
 - `Costume`: `genreIds`（空なら全ジャンル）、`tags`、汎用か固有か、固有なら対象 `characterIds` を1件以上保持。旧 `genreId` と `characterId` は読み込み互換用
 
@@ -40,13 +41,14 @@ DiaryEntry ── Genre / CosplayCharacter / Costume / PhotoRecord / LensInvento
 
 ファイル: `features/diary/domain/`
 
-`ActivityType` は `cosplay`、`photographer`、`other` の3種です。`DiaryEntry` は活動日、種別、任意参照、メモ、任意の予定名 `calendarTitle`、作成/更新日時を持ちます。`calendarTitle` はJSONに保存し、古いJSONでは空文字です。空なら連携時に種別・作品・キャラクター・衣装から予定名を生成します。既存CSV列は変更せず、予定名の移行にはJSONを使います。
+`ActivityType` は `cosplay`、`photographer`、`other` の3種です。`DiaryEntry` は活動日、種別、任意の参加イベント参照 `eventId`、その他の任意参照、メモ、個別の予定名 `calendarTitle`、作成/更新日時を持ちます。`calendarTitle` はJSONに保存し、古いJSONでは空文字です。空なら連携時に参加イベント名を優先し、未選択なら種別・作品・キャラクター・衣装から予定名を生成します。CSV定義には `events.csv` と日記の `event_id` を追加しました。予定名の移行にはJSONを使います。
 
 不変条件:
 
 - `cosplay` の保存には `genreId`、`characterId`、`costumeId` がすべて必要。
 - その他の種別ではそれらは不要。フォームで種別を変更すると参照をクリアする。
 - 同じ日付に複数件を保存できる。
+- 参加回数は同じ `eventId` と活動日の組を1回として数える。活動種別が違っても同日なら重複しない。マスター未選択の自由入力名は集計しない。
 - 一覧は活動日時の降順。特定日の抽出結果は昇順。
 - 複製時はカラコン実物参照をクリアし、写真参照など他の値は引き継ぐ。
 
@@ -101,9 +103,10 @@ DiaryEntry ── Genre / CosplayCharacter / Costume / PhotoRecord / LensInvento
 - 同日活動は、コスプレとカメラマンの両方が存在する日数。
 - 月別は1〜12月を常に返す。
 - ジャンル/キャラクター/衣装ランキングは件数降順、同数ならID昇順、上位5件。
+- 参加イベントは `eventId` と活動日の組を重複排除して数え、年別/全期間の回数と上位5件を返す。
 - カラコン利用製品ID、未使用在庫、期限間近件数は呼び出し側から渡す。
 
-現行ダッシュボードはキャラクターランキングのIDをマスターデータの名前へ解決して表示します。参照先が存在しない場合は「取得できませんでした」と表示します。`expiringLensCount` はまだ算出していません。
+現行ダッシュボードはキャラクターと参加イベントのランキングのIDをマスターデータの名前へ解決して表示します。参照先が存在しない場合は「取得できませんでした」と表示します。`expiringLensCount` はまだ算出していません。
 
 ## CSV
 

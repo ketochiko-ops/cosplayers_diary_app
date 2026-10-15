@@ -61,4 +61,26 @@ void main() {
     expect(service.calculate(entries).cosplayCount, 3);
     expect(service.calculate(const []).topCharacters, isEmpty);
   });
+
+  test('event participation counts distinct dates across activity types', () {
+    final visits = [
+      for (final (id, date, type, eventId) in [
+        ('a', DateTime(2026, 1, 1, 9), ActivityType.other, 'acosta'),
+        ('b', DateTime(2026, 1, 1, 18), ActivityType.photographer, 'acosta'),
+        ('c', DateTime(2026, 2, 2), ActivityType.other, 'acosta'),
+        ('d', DateTime(2025, 3, 3), ActivityType.other, 'acosta'),
+        ('e', DateTime(2026, 2, 2), ActivityType.other, 'other-event'),
+      ])
+        DiaryEntry(
+          id: id,
+          activityDate: date,
+          activityType: type,
+          eventId: eventId,
+        ),
+    ];
+    final current = service.calculate(visits, year: 2026);
+    expect(current.eventParticipationCounts, {'acosta': 2, 'other-event': 1});
+    expect(current.topEvents.first.id, 'acosta');
+    expect(service.calculate(visits).eventParticipationCounts['acosta'], 3);
+  });
 }

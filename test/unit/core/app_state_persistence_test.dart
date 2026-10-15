@@ -165,6 +165,49 @@ void main() {
       expect(restoredDiary.entries.single.costumeId, costume.id);
     },
   );
+
+  test(
+    'event master and diary link roundtrip with old JSON compatibility',
+    () async {
+      final settings = _MemorySettingsStore();
+      final masters = MasterDataStore();
+      final event = masters.addEvent('アコスタ池袋');
+      final diary = DiaryStore()
+        ..save(
+          DiaryEntry(
+            id: 'visit',
+            activityDate: DateTime(2026, 10, 15),
+            activityType: ActivityType.other,
+            eventId: event.id,
+          ),
+        );
+      final source = AppStatePersistence(
+        store: settings,
+        masters: masters,
+        diary: diary,
+        lenses: LensStore(),
+      );
+      await source.save();
+      final restoredMasters = MasterDataStore();
+      final restoredDiary = DiaryStore();
+      final restored = AppStatePersistence(
+        store: settings,
+        masters: restoredMasters,
+        diary: restoredDiary,
+        lenses: LensStore(),
+      );
+      await restored.load();
+      expect(restoredMasters.events.single.name, 'アコスタ池袋');
+      expect(restoredDiary.entries.single.eventId, event.id);
+
+      final old = jsonDecode(source.exportJson()) as Map<String, dynamic>;
+      old.remove('events');
+      (old['diary'] as List).single.remove('eventId');
+      restored.restoreJson(jsonEncode(old));
+      expect(restoredMasters.events, isEmpty);
+      expect(restoredDiary.entries.single.eventId, isNull);
+    },
+  );
 }
 
 class _MemorySettingsStore implements SettingsStore {

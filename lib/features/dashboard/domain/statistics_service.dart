@@ -18,6 +18,8 @@ class ActivityStatistics {
     required this.topCharacters,
     required this.topGenres,
     required this.topCostumes,
+    required this.eventParticipationCounts,
+    required this.topEvents,
     required this.lensUsageCount,
     required this.lensUsageByProduct,
     required this.unusedLensStock,
@@ -33,6 +35,8 @@ class ActivityStatistics {
   final List<RankingEntry> topCharacters;
   final List<RankingEntry> topGenres;
   final List<RankingEntry> topCostumes;
+  final Map<String, int> eventParticipationCounts;
+  final List<RankingEntry> topEvents;
   final int lensUsageCount;
   final Map<String, int> lensUsageByProduct;
   final int unusedLensStock;
@@ -64,6 +68,18 @@ class StatisticsService {
     final photographerDates = photographers
         .map((entry) => _dateKey(entry.activityDate))
         .toSet();
+    final eventDays = <String, Set<String>>{};
+    for (final entry in entries) {
+      final eventId = entry.eventId;
+      if (eventId != null && eventId.isNotEmpty) {
+        eventDays
+            .putIfAbsent(eventId, () => <String>{})
+            .add(_dateKey(entry.activityDate));
+      }
+    }
+    final eventCounts = {
+      for (final entry in eventDays.entries) entry.key: entry.value.length,
+    };
     return ActivityStatistics(
       cosplayCount: cosplay.length,
       cosplayDays: cosplayDates.length,
@@ -75,6 +91,8 @@ class StatisticsService {
       topCharacters: _ranking(cosplay.map((entry) => entry.characterId)),
       topGenres: _ranking(cosplay.map((entry) => entry.genreId)),
       topCostumes: _ranking(cosplay.map((entry) => entry.costumeId)),
+      eventParticipationCounts: eventCounts,
+      topEvents: _rankCounts(eventCounts),
       lensUsageCount: lensUsageProductIds.length,
       lensUsageByProduct: _counts(lensUsageProductIds),
       unusedLensStock: unusedLensStock,
@@ -101,9 +119,12 @@ class StatisticsService {
   }
 
   List<RankingEntry> _ranking(Iterable<String?> values) {
+    return _rankCounts(_counts(values));
+  }
+
+  List<RankingEntry> _rankCounts(Map<String, int> counts) {
     final result = [
-      for (final entry in _counts(values).entries)
-        RankingEntry(entry.key, entry.value),
+      for (final entry in counts.entries) RankingEntry(entry.key, entry.value),
     ];
     result.sort((a, b) {
       final count = b.count.compareTo(a.count);

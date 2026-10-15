@@ -29,15 +29,25 @@ String _genreLabel(DiaryEntry entry, MasterDataStore masters) =>
         ?.name ??
     '取得できませんでした';
 
+String _eventLabel(DiaryEntry entry, MasterDataStore masters) =>
+    masters.events
+        .where((value) => value.id == entry.eventId)
+        .firstOrNull
+        ?.name ??
+    '取得できませんでした';
+
 bool _hasMissingMaster(DiaryEntry entry, MasterDataStore masters) =>
-    entry.activityType == ActivityType.cosplay &&
-    (!masters.genres.any((value) => value.id == entry.genreId) ||
-        !masters.characters.any((value) => value.id == entry.characterId) ||
-        !masters.costumes.any((value) => value.id == entry.costumeId));
+    (entry.eventId != null &&
+        !masters.events.any((value) => value.id == entry.eventId)) ||
+    (entry.activityType == ActivityType.cosplay &&
+        (!masters.genres.any((value) => value.id == entry.genreId) ||
+            !masters.characters.any((value) => value.id == entry.characterId) ||
+            !masters.costumes.any((value) => value.id == entry.costumeId)));
 
 String _dayPreview(DiaryEntry entry, MasterDataStore masters) {
   final title = entry.calendarTitle.trim();
   if (title.isNotEmpty) return title;
+  if (entry.eventId != null) return _eventLabel(entry, masters);
   if (entry.activityType == ActivityType.cosplay) {
     return _characterLabel(entry, masters);
   }
@@ -364,8 +374,9 @@ class DiaryTile extends StatelessWidget {
     final missingMaster = _hasMissingMaster(entry, masterStore);
     final details = <String>[
       if (missingMaster) '⚠ 参照先を取得できませんでした',
+      if (entry.eventId != null) '参加イベント: ${_eventLabel(entry, masterStore)}',
       if (entry.calendarTitle.trim().isNotEmpty)
-        'イベント: ${entry.calendarTitle.trim()}',
+        '${entry.eventId == null ? 'イベント' : '予定名'}: ${entry.calendarTitle.trim()}',
       if (entry.activityType == ActivityType.cosplay)
         'ジャンル: ${_genreLabel(entry, masterStore)}  /  キャラ: ${_characterLabel(entry, masterStore)}  /  衣装: ${_costumeLabel(entry, masterStore)}',
       if (entry.memo.trim().isNotEmpty) 'メモ: ${entry.memo.trim()}',

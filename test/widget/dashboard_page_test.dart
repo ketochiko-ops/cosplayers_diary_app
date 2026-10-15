@@ -57,4 +57,41 @@ void main() {
       expect(find.text('character-miku'), findsNothing);
     },
   );
+
+  testWidgets('dashboard shows distinct-day participation for an event', (
+    tester,
+  ) async {
+    final masters = MasterDataStore();
+    final event = masters.addEvent('アコスタ池袋');
+    final diary = DiaryStore()
+      ..save(
+        DiaryEntry(
+          id: 'a',
+          activityDate: DateTime(DateTime.now().year, 10, 1),
+          activityType: ActivityType.other,
+          eventId: event.id,
+        ),
+      )
+      ..save(
+        DiaryEntry(
+          id: 'b',
+          activityDate: DateTime(DateTime.now().year, 10, 1, 18),
+          activityType: ActivityType.photographer,
+          eventId: event.id,
+        ),
+      );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: DashboardPage(
+            diaryStore: diary,
+            lensStore: LensStore(),
+            masterStore: masters,
+          ),
+        ),
+      ),
+    );
+    await tester.scrollUntilVisible(find.text('アコスタ池袋'), 400);
+    expect(find.text('1回'), findsOneWidget);
+  });
 }

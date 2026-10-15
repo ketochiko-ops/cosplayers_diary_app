@@ -44,6 +44,7 @@ class _DiaryFormState extends State<DiaryForm> {
   String? _genreId;
   String? _characterId;
   String? _costumeId;
+  String? _eventId;
   PhotoRecord? _photo;
   Future<Uint8List>? _photoBytes;
   bool _picking = false;
@@ -62,6 +63,7 @@ class _DiaryFormState extends State<DiaryForm> {
     _genreId = widget.entry?.genreId;
     _characterId = widget.entry?.characterId;
     _costumeId = widget.entry?.costumeId;
+    _eventId = widget.entry?.eventId;
     _photo = widget.photos?.find(widget.entry?.photoId);
     if (_photo != null) {
       _photoBytes = widget.photos!.files.read(_photo!.relativePath);
@@ -116,6 +118,15 @@ class _DiaryFormState extends State<DiaryForm> {
         !characters.any((value) => value.id == _characterId);
     final missingCostume =
         _costumeId != null && !costumes.any((value) => value.id == _costumeId);
+    final events = widget.masterStore.events
+        .where((value) => !value.archived)
+        .toList();
+    if (_eventId != null && !events.any((value) => value.id == _eventId)) {
+      final previous = _byId(widget.masterStore.events, _eventId);
+      if (previous != null) events.add(previous);
+    }
+    final selectedEvent = _byId(events, _eventId);
+    final missingEvent = _eventId != null && selectedEvent == null;
     return Scaffold(
       appBar: AppBar(title: Text(widget.entry == null ? '日記を追加' : '日記を編集')),
       body: ListView(
@@ -260,11 +271,45 @@ class _DiaryFormState extends State<DiaryForm> {
             ),
           ],
           const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  key: ValueKey('event:$_eventId'),
+                  initialValue: _eventId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: '参加イベント（任意）'),
+                  items: [
+                    const DropdownMenuItem(value: null, child: Text('指定しない')),
+                    if (missingEvent)
+                      DropdownMenuItem(
+                        value: _eventId,
+                        child: const Text('取得できませんでした'),
+                      ),
+                    for (final event in events)
+                      DropdownMenuItem(
+                        value: event.id,
+                        child: Text(event.name),
+                      ),
+                  ],
+                  onChanged: _selectEvent,
+                ),
+              ),
+              IconButton(
+                tooltip: '参加イベントを追加',
+                onPressed: _addEvent,
+                icon: const Icon(Icons.add_circle_outline),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
           TextField(
             controller: _calendarTitle,
-            decoration: const InputDecoration(
-              labelText: 'イベント・予定名（任意）',
-              helperText: '未入力なら活動種別・作品・キャラクターから自動作成します',
+            decoration: InputDecoration(
+              labelText: '個別の予定名（任意）',
+              helperText: _eventId == null
+                  ? '参加イベントを選ばない場合は自由に入力できます'
+                  : '未入力なら参加イベント名を表示します',
             ),
           ),
           const SizedBox(height: 12),
@@ -336,6 +381,7 @@ class _DiaryFormState extends State<DiaryForm> {
         Genre e => e.id,
         CosplayCharacter e => e.id,
         Costume e => e.id,
+        ParticipationEvent e => e.id,
         _ => null,
       };
       if (valueId == id) return value;
@@ -354,6 +400,24 @@ class _DiaryFormState extends State<DiaryForm> {
       _genreId = genre.id;
       _characterId = _costumeId = null;
     });
+  }
+
+  void _selectEvent(String? id) {
+    final selected = _byId(widget.masterStore.events, id);
+    if (selected != null && _calendarTitle.text.trim() == selected.name) {
+      _calendarTitle.clear();
+    }
+    setState(() => _eventId = id);
+  }
+
+  Future<void> _addEvent() async {
+    final result = await showQuickAddMasterDialog(
+      context: context,
+      title: '参加イベントを追加',
+    );
+    if (result == null || !mounted) return;
+    final event = widget.masterStore.addEvent(result.name);
+    _selectEvent(event.id);
   }
 
   Future<void> _addCharacter(Genre genre) async {
@@ -406,6 +470,7 @@ class _DiaryFormState extends State<DiaryForm> {
       genreId: _genreId,
       characterId: _characterId,
       costumeId: _costumeId,
+      eventId: _eventId,
       memo: _memo.text.trim(),
       calendarTitle: _calendarTitle.text.trim(),
       photoId: widget.photos == null ? current?.photoId : _photo?.id,

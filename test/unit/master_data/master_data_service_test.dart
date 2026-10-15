@@ -72,6 +72,22 @@ void main() {
     expect(store.costumes, isEmpty);
   });
 
+  test(
+    'event master keeps a stable ID and requires archiving before deletion',
+    () {
+      final store = MasterDataStore();
+      final event = store.addEvent(' アコスタ池袋 ');
+      expect(event.name, 'アコスタ池袋');
+      expect(() => store.deleteArchivedEvent(event.id), throwsArgumentError);
+      store.updateEvent(event.id, '池袋アコスタ');
+      expect(store.events.single.id, event.id);
+      expect(store.events.single.name, '池袋アコスタ');
+      store.archiveEvent(event.id);
+      store.deleteArchivedEvent(event.id);
+      expect(store.events, isEmpty);
+    },
+  );
+
   test('genre-scoped general and multi-character costumes use IDs', () {
     final values = [
       Costume(id: 'general', name: '制服', isGeneral: true, genreId: 'g1'),

@@ -1,11 +1,12 @@
 # コスプレ日記
 
-iOS・iPadOS・Android・PWA向けの、オフラインで使えるコスプレ活動管理アプリです。カレンダー、日記、ジャンル・キャラクター・衣装、カラコン購入/実物/使用履歴、写真、統計、CSV、JSONプロジェクト保存を一つのFlutterプロジェクトで扱います。通常利用にネット接続やアカウントは不要です。Web/PWA版では任意でGoogleカレンダーと日記を同期できます。
+iOS・iPadOS・Android・PWA向けの、オフラインで使えるコスプレ活動管理アプリです。カレンダー、日記、参加イベント・ジャンル・キャラクター・衣装、カラコン購入/実物/使用履歴、写真、統計、CSV、JSONプロジェクト保存を一つのFlutterプロジェクトで扱います。通常利用にネット接続やアカウントは不要です。Web/PWA版では任意でGoogleカレンダーと日記を同期できます。
 
 ## 主な機能
 
 - 月カレンダー、同日複数活動、コスプレ/カメラマン/その他の日記
 - ジャンル→キャラクター→固有/汎用衣装の連動候補、衣装の複数ジャンル・全ジャンル・対象キャラ複数選択、衣装タグ、マスター名の編集、アーカイブからの完全削除
+- 参加イベントのマスター管理と日記への紐付け、同じ日の複数日記を1回とする参加回数集計
 - カラコン製品、購入別在庫、1組単位の開封/使用履歴、ワンデー再使用防止
 - 年/全期間の活動回数・活動日数・同日重複・月別・上位ランキング
 - 日記への画像追加・プレビュー・差し替え（オリジナルまたは長辺2,048px）
@@ -33,7 +34,7 @@ lib/
 ├── core/                # プラットフォーム別状態保存、SQLite、時計、ファイル境界
 └── features/
     ├── diary/           # 日記・カレンダー
-    ├── master_data/     # ジャンル・キャラクター・衣装
+    ├── master_data/     # 参加イベント・ジャンル・キャラクター・衣装
     ├── contact_lenses/  # 製品・購入・実物・使用台帳
     ├── photos/          # 安全な画像保存・縮小
     ├── backup/          # CSV・JSON・旧ZIP読み込み
@@ -158,6 +159,7 @@ Safariでは任意の外部フォルダへ継続上書きできないため、�
 | ファイル | 列（順番） |
 |---|---|
 | `genres.csv` | `id,name,memo,archived` |
+| `events.csv` | `id,name,memo,archived` |
 | `characters.csv` | `id,genre_id,name,memo,default_lens_product_id,archived` |
 | `costumes.csv` | `id,name,is_general,character_id,memo,archived` |
 | `character_lenses.csv` | `character_id,lens_product_id,is_default` |
@@ -165,7 +167,7 @@ Safariでは任意の外部フォルダへ継続上書きできないため、�
 | `lens_purchases.csv` | `id,lens_product_id,purchased_on,unopened_expires_on,quantity` |
 | `lens_inventory.csv` | `id,purchase_id,opened_on,disposed` |
 | `lens_usage.csv` | `id,diary_id,inventory_id,used_on` |
-| `diary.csv` | `id,activity_date,activity_type,genre_id,character_id,costume_id,memo,photo_id,lens_inventory_id` |
+| `diary.csv` | `id,activity_date,activity_type,genre_id,character_id,costume_id,event_id,memo,photo_id,lens_inventory_id` |
 | `photos.csv` | `id,relative_path,original_name,width,height,created_at` |
 
 `wear_type` は `oneDay` / `twoWeeks` / `monthly` / `other`、`activity_type` は `cosplay` / `photographer` / `other` です。サンプルは [`samples/csv`](samples/csv) にあります。取り込み前に必須値、重複ID、参照ID、日付、整数を検証し、追加・上書き・全置換の差分件数を計算できます。
@@ -181,6 +183,8 @@ Safariでは任意の外部フォルダへ継続上書きできないため、�
 日記の追加・編集画面では、ジャンル・キャラクター・衣装の各欄の「＋」から、その場で新規登録できます。キャラクターは選択中のジャンル、衣装は選択中のキャラクターに紐付きます。衣装は「汎用衣装」も選べます。追加後は日記の選択に自動反映し、ジャンル変更時はキャラクター・衣装、キャラクター変更時は衣装の選択を解除します。日記のメモなどは保持します。
 
 管理画面では各マスターの名前を編集できます。キャラクターを追加するときはジャンルを選び、衣装を追加・編集するときは対象ジャンルを複数選択できます。ジャンル未選択なら全ジャンルで使えます。「汎用衣装」または「固有衣装」を指定し、固有衣装には対象キャラクターを複数選べます。例えばウマ娘の「勝負服」1件に該当するキャラクターを個別に選び、「制服」はそのジャンルの汎用衣装として登録できます。衣装ごとのタグで「メイド服（ロング丈）」など同名の衣装も区別できます。
+
+「参加イベント」も管理画面または日記の追加・編集画面から登録できます。日記で「アコスタ池袋」などのマスターを選ぶと、開催日が違っても同じイベントとして集計します。同じイベント・同じ活動日の複数日記は1回として数え、管理画面では全期間、ダッシュボードでは選択した年または全期間の参加回数を表示します。個別の予定名は引き続き自由入力できます。既存の日記を集計に含めるには、その日記を編集して参加イベントを選択してください。
 
 「追加して選択」で確定した項目は、日記を保存せず戻った場合もマスターに残ります。初回画面は保存方法の選択に絞り、JSONの控えの読み込みは設定画面から行います。
 

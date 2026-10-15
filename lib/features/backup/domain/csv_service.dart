@@ -190,6 +190,7 @@ class CsvService {
 
 const csvFileColumns = <String, List<String>>{
   'genres.csv': ['id', 'name', 'memo', 'archived'],
+  'events.csv': ['id', 'name', 'memo', 'archived'],
   'characters.csv': [
     'id',
     'genre_id',
@@ -233,6 +234,7 @@ const csvFileColumns = <String, List<String>>{
     'genre_id',
     'character_id',
     'costume_id',
+    'event_id',
     'memo',
     'photo_id',
     'lens_inventory_id',

@@ -15,6 +15,7 @@ class DiaryEntry {
     this.genreId,
     this.characterId,
     this.costumeId,
+    this.eventId,
     this.memo = '',
     this.calendarTitle = '',
     this.photoId,
@@ -30,6 +31,7 @@ class DiaryEntry {
   final String? genreId;
   final String? characterId;
   final String? costumeId;
+  final String? eventId;
   final String memo;
   final String calendarTitle;
   final String? photoId;
@@ -44,6 +46,7 @@ class DiaryEntry {
     String? genreId,
     String? characterId,
     String? costumeId,
+    String? eventId,
     String? memo,
     String? calendarTitle,
     String? photoId,
@@ -57,6 +60,7 @@ class DiaryEntry {
     genreId: genreId ?? this.genreId,
     characterId: characterId ?? this.characterId,
     costumeId: costumeId ?? this.costumeId,
+    eventId: eventId ?? this.eventId,
     memo: memo ?? this.memo,
     calendarTitle: calendarTitle ?? this.calendarTitle,
     photoId: photoId ?? this.photoId,

@@ -6,6 +6,7 @@ class MasterDataStore extends ChangeNotifier {
   final List<Genre> genres = [];
   final List<CosplayCharacter> characters = [];
   final List<Costume> costumes = [];
+  final List<ParticipationEvent> events = [];
   int _sequence = 0;
 
   String _id(String prefix) =>
@@ -16,6 +17,40 @@ class MasterDataStore extends ChangeNotifier {
     genres.add(value);
     notifyListeners();
     return value;
+  }
+
+  ParticipationEvent addEvent(String name, {String memo = ''}) {
+    final value = ParticipationEvent(
+      id: _id('event'),
+      name: _name(name),
+      memo: memo.trim(),
+    );
+    events.add(value);
+    notifyListeners();
+    return value;
+  }
+
+  void updateEvent(String id, String name) {
+    final index = events.indexWhere((value) => value.id == id);
+    if (index < 0) throw ArgumentError.value(id, 'id', '参加イベントが見つかりません');
+    events[index] = events[index].copyWith(name: _name(name));
+    notifyListeners();
+  }
+
+  void archiveEvent(String id) {
+    final index = events.indexWhere((value) => value.id == id);
+    if (index < 0) throw ArgumentError.value(id, 'id', '参加イベントが見つかりません');
+    events[index] = events[index].copyWith(archived: true);
+    notifyListeners();
+  }
+
+  void deleteArchivedEvent(String id) {
+    final index = events.indexWhere((value) => value.id == id);
+    if (index < 0 || !events[index].archived) {
+      throw ArgumentError.value(id, 'id', 'アーカイブ済みの参加イベントを選択してください');
+    }
+    events.removeAt(index);
+    notifyListeners();
   }
 
   CosplayCharacter addCharacter(

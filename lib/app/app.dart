@@ -233,7 +233,11 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         photos: _photos,
         onDelete: _deleteDiary,
       ),
-      2 => ManagementPage(masterStore: _masterStore, lensStore: _lensStore),
+      2 => ManagementPage(
+        masterStore: _masterStore,
+        lensStore: _lensStore,
+        diaryStore: _diaryStore,
+      ),
       3 => DashboardPage(
         diaryStore: _diaryStore,
         lensStore: _lensStore,

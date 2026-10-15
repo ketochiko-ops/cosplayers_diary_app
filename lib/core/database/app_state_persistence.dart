@@ -116,6 +116,10 @@ class AppStatePersistence {
           'archived': e.archived,
         },
     ],
+    'events': [
+      for (final e in masters.events)
+        {'id': e.id, 'name': e.name, 'memo': e.memo, 'archived': e.archived},
+    ],
     'diary': [
       for (final e in diary.entries)
         {
@@ -125,6 +129,7 @@ class AppStatePersistence {
           'genreId': e.genreId,
           'characterId': e.characterId,
           'costumeId': e.costumeId,
+          'eventId': e.eventId,
           'memo': e.memo,
           'calendarTitle': e.calendarTitle,
           'photoId': e.photoId,
@@ -282,6 +287,17 @@ class AppStatePersistence {
             archived: raw['archived'] as bool? ?? false,
           ),
       ]);
+    masters.events
+      ..clear()
+      ..addAll([
+        for (final raw in _maps(value['events']))
+          ParticipationEvent(
+            id: raw['id'] as String,
+            name: raw['name'] as String,
+            memo: raw['memo'] as String? ?? '',
+            archived: raw['archived'] as bool? ?? false,
+          ),
+      ]);
     diary.entries
       ..clear()
       ..addAll([
@@ -295,6 +311,7 @@ class AppStatePersistence {
             genreId: raw['genreId'] as String?,
             characterId: raw['characterId'] as String?,
             costumeId: raw['costumeId'] as String?,
+            eventId: raw['eventId'] as String?,
             memo: raw['memo'] as String? ?? '',
             calendarTitle: raw['calendarTitle'] as String? ?? '',
             photoId: raw['photoId'] as String?,

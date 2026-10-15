@@ -18,6 +18,28 @@ class Genre {
   );
 }
 
+class ParticipationEvent {
+  const ParticipationEvent({
+    required this.id,
+    required this.name,
+    this.memo = '',
+    this.archived = false,
+  });
+
+  final String id;
+  final String name;
+  final String memo;
+  final bool archived;
+
+  ParticipationEvent copyWith({String? name, String? memo, bool? archived}) =>
+      ParticipationEvent(
+        id: id,
+        name: name ?? this.name,
+        memo: memo ?? this.memo,
+        archived: archived ?? this.archived,
+      );
+}
+
 class CosplayCharacter {
   const CosplayCharacter({
     required this.id,

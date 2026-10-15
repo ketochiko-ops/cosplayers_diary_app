@@ -1,6 +1,8 @@
 import 'package:cosplayers_diary/features/master_data/application/master_data_store.dart';
 import 'package:cosplayers_diary/features/master_data/domain/master_service.dart';
 import 'package:cosplayers_diary/features/master_data/presentation/master_data_page.dart';
+import 'package:cosplayers_diary/features/diary/application/diary_store.dart';
+import 'package:cosplayers_diary/features/diary/domain/diary_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -205,5 +207,60 @@ void main() {
     expect(store.genres, isEmpty);
     expect(find.text('アーカイブ済みのデータはありません'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('event master shows visits and supports edit and archive', (
+    tester,
+  ) async {
+    final store = MasterDataStore();
+    final event = store.addEvent('アコスタ池袋');
+    final diary = DiaryStore()
+      ..save(
+        DiaryEntry(
+          id: 'a',
+          activityDate: DateTime(2026, 10, 15),
+          activityType: ActivityType.other,
+          eventId: event.id,
+        ),
+      )
+      ..save(
+        DiaryEntry(
+          id: 'b',
+          activityDate: DateTime(2026, 10, 15, 18),
+          activityType: ActivityType.photographer,
+          eventId: event.id,
+        ),
+      );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MasterDataPage(store: store, diaryStore: diary),
+        ),
+      ),
+    );
+    await tester.tap(find.text('参加イベント').first);
+    await tester.pumpAndSettle();
+    expect(find.text('参加 1回'), findsOneWidget);
+    diary.save(
+      DiaryEntry(
+        id: 'c',
+        activityDate: DateTime(2026, 10, 16),
+        activityType: ActivityType.other,
+        eventId: event.id,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('参加 2回'), findsOneWidget);
+    await tester.tap(find.byTooltip('アコスタ池袋を編集'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField), '池袋アコスタ');
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+    expect(store.events.single.name, '池袋アコスタ');
+    await tester.tap(find.byTooltip('池袋アコスタをアーカイブ'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('アーカイブ'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('池袋アコスタを完全に削除'), findsOneWidget);
   });
 }

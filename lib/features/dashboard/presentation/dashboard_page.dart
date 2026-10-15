@@ -31,6 +31,13 @@ class _DashboardPageState extends State<DashboardPage> {
     return '取得できませんでした';
   }
 
+  String _eventName(String id) =>
+      widget.masterStore.events
+          .where((event) => event.id == id)
+          .firstOrNull
+          ?.name ??
+      '取得できませんでした';
+
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: Listenable.merge([
@@ -109,6 +116,15 @@ class _DashboardPageState extends State<DashboardPage> {
             ListTile(
               dense: true,
               title: Text(_characterName(rank.id)),
+              trailing: Text('${rank.count}回'),
+            ),
+          const SizedBox(height: 16),
+          Text('参加イベント', style: Theme.of(context).textTheme.titleMedium),
+          if (stats.topEvents.isEmpty) const Text('記録がありません'),
+          for (final rank in stats.topEvents)
+            ListTile(
+              dense: true,
+              title: Text(_eventName(rank.id)),
               trailing: Text('${rank.count}回'),
             ),
         ],

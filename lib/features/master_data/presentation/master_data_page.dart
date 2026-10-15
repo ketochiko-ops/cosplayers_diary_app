@@ -2,14 +2,17 @@ import 'package:flutter/material.dart';
 
 import '../application/master_data_store.dart';
 import '../domain/master_models.dart';
+import '../../diary/application/diary_store.dart';
+import '../../dashboard/domain/statistics_service.dart';
 
-enum _MasterKind { genre, character, costume }
+enum _MasterKind { genre, character, costume, event }
 
 extension on _MasterKind {
   String get label => switch (this) {
     _MasterKind.genre => 'ジャンル',
     _MasterKind.character => 'キャラクター',
     _MasterKind.costume => '衣装',
+    _MasterKind.event => '参加イベント',
   };
 }
 
@@ -23,8 +26,9 @@ typedef _MasterInput = ({
 });
 
 class MasterDataPage extends StatefulWidget {
-  const MasterDataPage({required this.store, super.key});
+  const MasterDataPage({required this.store, this.diaryStore, super.key});
   final MasterDataStore store;
+  final DiaryStore? diaryStore;
 
   @override
   State<MasterDataPage> createState() => _MasterDataPageState();
@@ -32,7 +36,7 @@ class MasterDataPage extends StatefulWidget {
 
 class _MasterDataPageState extends State<MasterDataPage>
     with SingleTickerProviderStateMixin {
-  late final TabController _tabs = TabController(length: 4, vsync: this);
+  late final TabController _tabs = TabController(length: 5, vsync: this);
 
   @override
   void dispose() {
@@ -42,13 +46,21 @@ class _MasterDataPageState extends State<MasterDataPage>
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-    animation: Listenable.merge([widget.store, _tabs]),
+    animation: Listenable.merge([
+      widget.store,
+      _tabs,
+      if (widget.diaryStore != null) widget.diaryStore!,
+    ]),
     builder: (context, _) {
       final genres = widget.store.genres.where((e) => !e.archived).toList();
       final characters = widget.store.characters
           .where((e) => !e.archived)
           .toList();
       final costumes = widget.store.costumes.where((e) => !e.archived).toList();
+      final events = widget.store.events.where((e) => !e.archived).toList();
+      final eventCounts = const StatisticsService()
+          .calculate(widget.diaryStore?.entries ?? const [])
+          .eventParticipationCounts;
       final archived = <_ArchivedMasterRow>[
         for (final genre in widget.store.genres.where((e) => e.archived))
           _ArchivedMasterRow(
@@ -79,6 +91,13 @@ class _MasterDataPageState extends State<MasterDataPage>
               costume.displayName,
             ),
           ),
+        for (final event in widget.store.events.where((e) => e.archived))
+          _ArchivedMasterRow(
+            kind: _MasterKind.event,
+            name: event.name,
+            onDelete: () =>
+                _deleteArchived(_MasterKind.event, event.id, event.name),
+          ),
       ];
       return Column(
         children: [
@@ -90,6 +109,7 @@ class _MasterDataPageState extends State<MasterDataPage>
               Tab(text: 'ジャンル'),
               Tab(text: 'キャラクター'),
               Tab(text: '衣装'),
+              Tab(text: '参加イベント'),
               Tab(text: 'アーカイブ'),
             ],
           ),
@@ -142,11 +162,23 @@ class _MasterDataPageState extends State<MasterDataPage>
                       ),
                   ],
                 ),
+                _MasterList(
+                  empty: '参加イベントを登録してください',
+                  entries: [
+                    for (final event in events)
+                      _MasterRow(
+                        name: event.name,
+                        detail: '参加 ${eventCounts[event.id] ?? 0}回',
+                        onEdit: () => _edit(_MasterKind.event, event: event),
+                        onArchive: () => widget.store.archiveEvent(event.id),
+                      ),
+                  ],
+                ),
                 _ArchivedMasterList(entries: archived),
               ],
             ),
           ),
-          if (_tabs.index != 3)
+          if (_tabs.index != 4)
             Padding(
               padding: const EdgeInsets.all(12),
               child: FilledButton.icon(
@@ -189,6 +221,8 @@ class _MasterDataPageState extends State<MasterDataPage>
           widget.store.deleteArchivedCharacter(id);
         case _MasterKind.costume:
           widget.store.deleteArchivedCostume(id);
+        case _MasterKind.event:
+          widget.store.deleteArchivedEvent(id);
       }
     } on ArgumentError catch (error) {
       _showError(error);
@@ -216,6 +250,8 @@ class _MasterDataPageState extends State<MasterDataPage>
             characterIds: input.characterIds,
             tags: input.tags,
           );
+        case _MasterKind.event:
+          widget.store.addEvent(input.name);
       }
     } on ArgumentError catch (error) {
       _showError(error);
@@ -227,6 +263,7 @@ class _MasterDataPageState extends State<MasterDataPage>
     Genre? genre,
     CosplayCharacter? character,
     Costume? costume,
+    ParticipationEvent? event,
   }) async {
     final input = await showDialog<_MasterInput>(
       context: context,
@@ -236,6 +273,7 @@ class _MasterDataPageState extends State<MasterDataPage>
         genre: genre,
         character: character,
         costume: costume,
+        event: event,
       ),
     );
     if (input == null || !mounted) return;
@@ -254,6 +292,8 @@ class _MasterDataPageState extends State<MasterDataPage>
             characterIds: input.characterIds,
             tags: input.tags,
           );
+        case _MasterKind.event:
+          widget.store.updateEvent(event!.id, input.name);
       }
     } on ArgumentError catch (error) {
       _showError(error);
@@ -358,12 +398,14 @@ class _MasterEditorDialog extends StatefulWidget {
     this.genre,
     this.character,
     this.costume,
+    this.event,
   });
   final _MasterKind kind;
   final MasterDataStore store;
   final Genre? genre;
   final CosplayCharacter? character;
   final Costume? costume;
+  final ParticipationEvent? event;
 
   @override
   State<_MasterEditorDialog> createState() => _MasterEditorDialogState();
@@ -372,7 +414,11 @@ class _MasterEditorDialog extends StatefulWidget {
 class _MasterEditorDialogState extends State<_MasterEditorDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _name = TextEditingController(
-    text: widget.genre?.name ?? widget.character?.name ?? widget.costume?.name,
+    text:
+        widget.genre?.name ??
+        widget.character?.name ??
+        widget.costume?.name ??
+        widget.event?.name,
   );
   late final TextEditingController _tags = TextEditingController(
     text: widget.costume?.tags.join('、') ?? '',
@@ -397,7 +443,8 @@ class _MasterEditorDialogState extends State<_MasterEditorDialog> {
     final editing =
         widget.genre != null ||
         widget.character != null ||
-        widget.costume != null;
+        widget.costume != null ||
+        widget.event != null;
     final genres = widget.store.genres
         .where((e) => !e.archived || _selectedGenres.contains(e.id))
         .toList();

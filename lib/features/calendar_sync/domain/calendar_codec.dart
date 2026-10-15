@@ -56,14 +56,17 @@ class CalendarCodec {
       throw const FormatException('カレンダーへ送るメモはUTF-8で16KB以内にしてください');
     }
     String name(String key) {
-      final value = (masters[key] as List).firstOrNull;
+      final value = (masters[key] as List? ?? const []).firstOrNull;
       if (value == null) return '未指定';
       return key == 'costumes' ? _costumeLabel(value) : value['name'] as String;
     }
 
     final label = _label(row['activityType'] as String);
+    final eventLine = row['eventId'] == null
+        ? ''
+        : '\n参加イベント: ${name('events')}';
     final description =
-        'コスプレ日記\n活動日: $date\n活動種別: $label\n作品: ${name('genres')}\nキャラクター: ${name('characters')}\n衣装: ${name('costumes')}$memoMarker$memo';
+        'コスプレ日記\n活動日: $date\n活動種別: $label$eventLine\n作品: ${name('genres')}\nキャラクター: ${name('characters')}\n衣装: ${name('costumes')}$memoMarker$memo';
     return {
       'id': eventId(row['id'] as String),
       'summary': title(row, masters),
@@ -88,6 +91,8 @@ class CalendarCodec {
   String title(Map<String, dynamic> row, Map<String, dynamic> masters) {
     final override = (row['calendarTitle'] as String? ?? '').trim();
     if (override.isNotEmpty) return override;
+    final event = (masters['events'] as List? ?? const []).firstOrNull;
+    if (event != null) return event['name'] as String;
     final names = <String>[
       for (final key in ['genres', 'characters', 'costumes'])
         if ((masters[key] as List).isNotEmpty)
@@ -159,6 +164,7 @@ class CalendarCodec {
         'genreId': null,
         'characterId': null,
         'costumeId': null,
+        'eventId': null,
         'memo': description,
         'calendarTitle': summary,
         'photoId': null,
@@ -170,6 +176,7 @@ class CalendarCodec {
         'genres': <dynamic>[],
         'characters': <dynamic>[],
         'costumes': <dynamic>[],
+        'events': <dynamic>[],
       },
     );
   }
@@ -179,9 +186,9 @@ class CalendarCodec {
     CalendarDiary imported,
   ) {
     final merged = jsonDecode(jsonEncode(state)) as Map<String, dynamic>;
-    for (final key in ['genres', 'characters', 'costumes']) {
-      final list = merged[key] as List;
-      for (final raw in imported.masters[key] as List) {
+    for (final key in ['genres', 'characters', 'costumes', 'events']) {
+      final list = merged.putIfAbsent(key, () => <dynamic>[]) as List;
+      for (final raw in imported.masters[key] as List? ?? const []) {
         if (!list.any((e) => e['id'] == raw['id'])) list.add(raw);
       }
     }
@@ -212,6 +219,7 @@ class CalendarCodec {
         ].contains(e.key))
           e.key: e.value,
       'calendarTitle': row['calendarTitle'] ?? '',
+      'eventId': row['eventId'],
     },
     'masters': _mastersFor(row, state),
   });
@@ -248,7 +256,7 @@ class CalendarCodec {
       String? id,
       List<String> fields,
     ) => [
-      for (final raw in state[key] as List)
+      for (final raw in state[key] as List? ?? const [])
         if (raw['id'] == id) {for (final key in fields) key: raw[key]},
     ];
     return {
@@ -268,6 +276,7 @@ class CalendarCodec {
         'characterId',
         'tags',
       ]),
+      'events': selected('events', row['eventId'] as String?, ['id', 'name']),
     };
   }
 
@@ -281,14 +290,17 @@ class CalendarCodec {
       'genres': 'genreId',
       'characters': 'characterId',
       'costumes': 'costumeId',
+      'events': 'eventId',
     }.entries) {
       final id = row[pair.value];
-      if (type == 'cosplay' && id == null) {
+      if (type == 'cosplay' && pair.key != 'events' && id == null) {
         throw const FormatException('コスプレ日記の関連情報が不足しています');
       }
       if (id != null &&
-          !(masters[pair.key] as List).any((e) => e['id'] == id)) {
-        throw const FormatException('取得できませんでした: 日記に関連する作品・キャラクター・衣装を確認してください');
+          !(masters[pair.key] as List? ?? const []).any((e) => e['id'] == id)) {
+        throw const FormatException(
+          '取得できませんでした: 日記に関連する参加イベント・作品・キャラクター・衣装を確認してください',
+        );
       }
     }
   }
