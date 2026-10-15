@@ -38,15 +38,23 @@ class MasterDataStore extends ChangeNotifier {
   Costume addCostume(
     String name, {
     required bool isGeneral,
+    String? genreId,
     String? characterId,
+    List<String>? characterIds,
     String memo = '',
   }) {
-    if (!isGeneral) _requireActiveCharacter(characterId);
+    final scope = _costumeScope(
+      genreId: genreId,
+      isGeneral: isGeneral,
+      characterIds:
+          characterIds ?? (characterId == null ? const [] : [characterId]),
+    );
     final value = Costume(
       id: _id('costume'),
       name: _name(name),
       isGeneral: isGeneral,
-      characterId: isGeneral ? null : characterId,
+      genreId: scope.genreId,
+      characterIds: scope.characterIds,
       memo: memo.trim(),
     );
     costumes.add(value);
@@ -64,24 +72,69 @@ class MasterDataStore extends ChangeNotifier {
     String id, {
     required String name,
     required bool isGeneral,
+    String? genreId,
     String? characterId,
+    List<String>? characterIds,
   }) {
     final index = costumes.indexWhere((value) => value.id == id);
     if (index < 0) throw ArgumentError.value(id, 'id', '衣装が見つかりません');
     final current = costumes[index];
-    if (!isGeneral &&
-        (characterId != current.characterId || current.isGeneral)) {
-      _requireActiveCharacter(characterId);
-    }
+    final scope = _costumeScope(
+      genreId: genreId ?? current.genreId,
+      isGeneral: isGeneral,
+      characterIds:
+          characterIds ??
+          (characterId == null ? current.characterIds : [characterId]),
+      current: current,
+    );
     costumes[index] = Costume(
       id: current.id,
       name: _name(name),
       isGeneral: isGeneral,
-      characterId: isGeneral ? null : characterId,
+      genreId: scope.genreId,
+      characterIds: scope.characterIds,
       memo: current.memo,
       archived: current.archived,
     );
     notifyListeners();
+  }
+
+  ({String? genreId, List<String> characterIds}) _costumeScope({
+    required String? genreId,
+    required bool isGeneral,
+    required List<String> characterIds,
+    Costume? current,
+  }) {
+    final ids = isGeneral ? <String>[] : characterIds.toList();
+    if (!isGeneral && ids.isEmpty) {
+      throw ArgumentError.value(ids, 'characterIds', '対象キャラクターを選択してください');
+    }
+    if (ids.toSet().length != ids.length) {
+      throw ArgumentError.value(ids, 'characterIds', '同じキャラクターを重複登録できません');
+    }
+    final resolvedGenre =
+        genreId ??
+        (ids.isEmpty
+            ? null
+            : characters.where((e) => e.id == ids.first).firstOrNull?.genreId);
+    if (resolvedGenre != null && resolvedGenre != current?.genreId) {
+      _requireActiveGenre(resolvedGenre);
+    }
+    for (final id in ids) {
+      final character = characters.where((e) => e.id == id).firstOrNull;
+      if (character == null ||
+          (character.archived &&
+              !(current?.characterIds.contains(id) ?? false)) ||
+          character.genreId != resolvedGenre) {
+        throw ArgumentError.value(
+          id,
+          'characterIds',
+          '同じジャンルの有効なキャラクターを選択してください',
+        );
+      }
+    }
+    ids.sort();
+    return (genreId: resolvedGenre, characterIds: List.unmodifiable(ids));
   }
 
   String _name(String value) {
@@ -93,12 +146,6 @@ class MasterDataStore extends ChangeNotifier {
   void _requireActiveGenre(String id) {
     if (!genres.any((value) => value.id == id && !value.archived)) {
       throw ArgumentError.value(id, 'genreId', '有効なジャンルを選択してください');
-    }
-  }
-
-  void _requireActiveCharacter(String? id) {
-    if (!characters.any((value) => value.id == id && !value.archived)) {
-      throw ArgumentError.value(id, 'characterId', '有効なキャラクターを選択してください');
     }
   }
 

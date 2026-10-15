@@ -13,7 +13,13 @@ extension on _MasterKind {
   };
 }
 
-typedef _MasterInput = ({String name, String? parentId, bool isGeneral});
+typedef _MasterInput = ({
+  String name,
+  String? parentId,
+  bool isGeneral,
+  String? genreId,
+  List<String> characterIds,
+});
 
 class MasterDataPage extends StatefulWidget {
   const MasterDataPage({required this.store, super.key});
@@ -90,9 +96,8 @@ class _MasterDataPageState extends State<MasterDataPage>
                     for (final costume in costumes)
                       _MasterRow(
                         name: costume.name,
-                        detail: costume.isGeneral
-                            ? '汎用衣装'
-                            : '固有衣装 · ${widget.store.characters.where((e) => e.id == costume.characterId).firstOrNull?.name ?? '不明なキャラクター'}',
+                        detail:
+                            '${widget.store.genres.where((e) => e.id == costume.genreId).firstOrNull?.name ?? '全ジャンル（旧データ）'} · ${costume.isGeneral ? '汎用衣装' : '固有衣装 · ${costume.characterIds.map((id) => widget.store.characters.where((e) => e.id == id).firstOrNull?.name ?? '不明なキャラクター').join('、')}'}',
                         onEdit: () =>
                             _edit(_MasterKind.costume, costume: costume),
                         onArchive: () =>
@@ -133,7 +138,8 @@ class _MasterDataPageState extends State<MasterDataPage>
           widget.store.addCostume(
             input.name,
             isGeneral: input.isGeneral,
-            characterId: input.parentId,
+            genreId: input.genreId,
+            characterIds: input.characterIds,
           );
       }
     } on ArgumentError catch (error) {
@@ -169,7 +175,8 @@ class _MasterDataPageState extends State<MasterDataPage>
             costume!.id,
             name: input.name,
             isGeneral: input.isGeneral,
-            characterId: input.parentId,
+            genreId: input.genreId,
+            characterIds: input.characterIds,
           );
       }
     } on ArgumentError catch (error) {
@@ -256,8 +263,12 @@ class _MasterEditorDialogState extends State<_MasterEditorDialog> {
     text: widget.genre?.name ?? widget.character?.name ?? widget.costume?.name,
   );
   late bool _isGeneral = widget.costume?.isGeneral ?? true;
-  late String? _parentId =
-      widget.character?.genreId ?? widget.costume?.characterId;
+  late String? _parentId = widget.character?.genreId;
+  late String? _costumeGenreId = widget.costume?.genreId;
+  late final Set<String> _selectedCharacters = {
+    ...?widget.costume?.characterIds,
+  };
+  bool _showCharacterError = false;
 
   @override
   void dispose() {
@@ -271,15 +282,23 @@ class _MasterEditorDialogState extends State<_MasterEditorDialog> {
         widget.genre != null ||
         widget.character != null ||
         widget.costume != null;
-    final genres = widget.store.genres.where((e) => !e.archived).toList();
+    final genres = widget.store.genres
+        .where((e) => !e.archived || e.id == widget.costume?.genreId)
+        .toList();
     final characters = widget.store.characters
-        .where((e) => !e.archived || e.id == widget.costume?.characterId)
+        .where(
+          (e) =>
+              e.genreId == _costumeGenreId &&
+              (!e.archived || _selectedCharacters.contains(e.id)),
+        )
         .toList();
     return AlertDialog(
       title: Text('${widget.kind.label}を${editing ? '編集' : '追加'}'),
       content: SizedBox(
         width: 360,
-        height: widget.kind == _MasterKind.costume ? 228 : null,
+        height: widget.kind == _MasterKind.costume
+            ? (MediaQuery.sizeOf(context).height * 0.48).clamp(180.0, 360.0)
+            : null,
         child: Form(
           key: _formKey,
           child: SingleChildScrollView(
@@ -322,6 +341,26 @@ class _MasterEditorDialogState extends State<_MasterEditorDialog> {
                 ],
                 if (widget.kind == _MasterKind.costume) ...[
                   const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    key: ValueKey('costume-genre-$_costumeGenreId'),
+                    initialValue: _costumeGenreId,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'ジャンル'),
+                    items: [
+                      for (final genre in genres)
+                        DropdownMenuItem(
+                          value: genre.id,
+                          child: Text(genre.name),
+                        ),
+                    ],
+                    onChanged: (value) => setState(() {
+                      if (_costumeGenreId != value) _selectedCharacters.clear();
+                      _costumeGenreId = value;
+                    }),
+                    validator: (value) =>
+                        value == null ? 'ジャンルを選択してください' : null,
+                  ),
+                  const SizedBox(height: 12),
                   DropdownButtonFormField<bool>(
                     initialValue: _isGeneral,
                     decoration: const InputDecoration(labelText: '衣装の種類'),
@@ -333,27 +372,39 @@ class _MasterEditorDialogState extends State<_MasterEditorDialog> {
                   ),
                   if (!_isGeneral) ...[
                     const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      key: ValueKey('costume-owner-$_parentId'),
-                      initialValue: characters.any((e) => e.id == _parentId)
-                          ? _parentId
-                          : null,
-                      isExpanded: true,
-                      decoration: const InputDecoration(labelText: '対象キャラクター'),
-                      items: [
-                        for (final character in characters)
-                          DropdownMenuItem(
-                            value: character.id,
-                            child: Text(
-                              '${widget.store.genres.where((e) => e.id == character.genreId).firstOrNull?.name ?? '不明'} · ${character.name}',
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                      ],
-                      onChanged: (value) => setState(() => _parentId = value),
-                      validator: (value) =>
-                          value == null ? 'キャラクターを選択してください' : null,
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        '対象キャラクター（複数選択）',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
                     ),
+                    if (_costumeGenreId == null)
+                      const Text('先にジャンルを選択してください')
+                    else if (characters.isEmpty)
+                      const Text('このジャンルにキャラクターを登録してください'),
+                    for (final character in characters)
+                      CheckboxListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(character.name),
+                        value: _selectedCharacters.contains(character.id),
+                        onChanged: (selected) => setState(() {
+                          _showCharacterError = false;
+                          if (selected == true) {
+                            _selectedCharacters.add(character.id);
+                          } else {
+                            _selectedCharacters.remove(character.id);
+                          }
+                        }),
+                      ),
+                    if (_showCharacterError)
+                      Text(
+                        '対象キャラクターを選択してください',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
                   ],
                 ],
               ],
@@ -369,12 +420,20 @@ class _MasterEditorDialogState extends State<_MasterEditorDialog> {
         FilledButton(
           onPressed: () {
             if (!_formKey.currentState!.validate()) return;
+            if (widget.kind == _MasterKind.costume &&
+                !_isGeneral &&
+                _selectedCharacters.isEmpty) {
+              setState(() => _showCharacterError = true);
+              return;
+            }
             Navigator.pop(context, (
               name: _name.text.trim(),
-              parentId: _isGeneral && widget.kind == _MasterKind.costume
-                  ? null
-                  : _parentId,
+              parentId: _parentId,
               isGeneral: _isGeneral,
+              genreId: _costumeGenreId,
+              characterIds: _isGeneral
+                  ? <String>[]
+                  : _selectedCharacters.toList(),
             ));
           },
           child: Text(editing ? '保存' : '追加'),

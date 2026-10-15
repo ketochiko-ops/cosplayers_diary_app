@@ -18,7 +18,10 @@ class MasterDataService {
     CosplayCharacter character,
   ) => values
       .where(
-        (e) => !e.archived && (e.isGeneral || e.characterId == character.id),
+        (e) =>
+            !e.archived &&
+            (e.genreId == null || e.genreId == character.genreId) &&
+            (e.isGeneral || e.characterIds.contains(character.id)),
       )
       .toList(growable: false);
 

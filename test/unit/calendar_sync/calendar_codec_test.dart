@@ -65,6 +65,14 @@ void main() {
   });
   test('another device can reconstruct the referenced masters', () {
     final state = calendarState();
+    (state['characters'] as List).add({
+      'id': 'c2',
+      'genreId': 'g',
+      'name': 'キャラB',
+    });
+    (state['costumes'] as List).single
+      ..['genreId'] = 'g'
+      ..['characterIds'] = ['c', 'c2'];
     final event = codec.encode((state['diary'] as List).single, state);
     final empty = calendarState();
     for (final key in ['diary', 'genres', 'characters', 'costumes']) {
@@ -72,6 +80,8 @@ void main() {
     }
     final restored = codec.merge(empty, codec.decode(event, 'calendar-1'));
     expect((restored['characters'] as List).single['name'], 'キャラA');
+    expect((restored['costumes'] as List).single['genreId'], 'g');
+    expect((restored['costumes'] as List).single['characterIds'], ['c', 'c2']);
     expect((restored['diary'] as List).single['lensInventoryId'], isNull);
   });
   test(

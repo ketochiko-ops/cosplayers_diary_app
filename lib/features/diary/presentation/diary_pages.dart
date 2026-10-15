@@ -109,9 +109,35 @@ class _CalendarPageState extends State<CalendarPage> {
                   onPressed: () => _changeMonth(-1),
                   icon: const Icon(Icons.chevron_left),
                 ),
-                Text(
-                  '${_month.year}年 ${_month.month}月',
-                  style: Theme.of(context).textTheme.titleMedium,
+                DropdownButtonHideUnderline(
+                  child: DropdownButton<int>(
+                    key: const ValueKey('calendar-year'),
+                    value: _month.year,
+                    items: [
+                      for (final year in {
+                        for (var year = 1900; year <= 2100; year++) year,
+                        _month.year,
+                      }.toList()..sort())
+                        DropdownMenuItem(value: year, child: Text('$year年')),
+                    ],
+                    onChanged: (year) {
+                      if (year != null) _setMonth(year, _month.month);
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                DropdownButtonHideUnderline(
+                  child: DropdownButton<int>(
+                    key: const ValueKey('calendar-month'),
+                    value: _month.month,
+                    items: [
+                      for (var month = 1; month <= 12; month++)
+                        DropdownMenuItem(value: month, child: Text('$month月')),
+                    ],
+                    onChanged: (month) {
+                      if (month != null) _setMonth(_month.year, month);
+                    },
+                  ),
                 ),
                 IconButton(
                   tooltip: '次の月',
@@ -233,8 +259,10 @@ class _CalendarPageState extends State<CalendarPage> {
     },
   );
 
-  void _changeMonth(int delta) => setState(() {
-    _month = DateTime(_month.year, _month.month + delta);
+  void _changeMonth(int delta) => _setMonth(_month.year, _month.month + delta);
+
+  void _setMonth(int year, int month) => setState(() {
+    _month = DateTime(year, month);
     _selected = null;
   });
 

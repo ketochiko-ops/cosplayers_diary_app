@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:cosplayers_diary/core/database/app_state_persistence.dart';
 import 'package:cosplayers_diary/core/database/settings_store.dart';
 import 'package:cosplayers_diary/features/contact_lenses/application/lens_store.dart';
@@ -41,6 +43,7 @@ void main() {
     final masters = MasterDataStore();
     final genre = masters.addGenre('ウマ娘');
     final character = masters.addCharacter(genre.id, 'スペシャルウィーク');
+    final other = masters.addCharacter(genre.id, 'トウカイテイオー');
     final costume = masters.addCostume('勝負服', isGeneral: true);
     final diary = DiaryStore()
       ..save(
@@ -59,7 +62,8 @@ void main() {
       costume.id,
       name: '勝負服',
       isGeneral: false,
-      characterId: character.id,
+      genreId: genre.id,
+      characterIds: [character.id, other.id],
     );
     await AppStatePersistence(
       store: settings,
@@ -78,12 +82,41 @@ void main() {
     ).load();
     expect(restoredMasters.genres.single.id, genre.id);
     expect(restoredMasters.genres.single.name, 'ウマ娘 プリティーダービー');
-    expect(restoredMasters.characters.single.id, character.id);
-    expect(restoredMasters.characters.single.name, 'スペシャルウィーク改');
+    expect(restoredMasters.characters.first.id, character.id);
+    expect(restoredMasters.characters.first.name, 'スペシャルウィーク改');
     expect(restoredMasters.costumes.single.id, costume.id);
     expect(restoredMasters.costumes.single.isGeneral, isFalse);
-    expect(restoredMasters.costumes.single.characterId, character.id);
+    expect(restoredMasters.costumes.single.genreId, genre.id);
+    expect(restoredMasters.costumes.single.characterIds, [
+      character.id,
+      other.id,
+    ]);
     expect(restoredDiary.entries.single.costumeId, costume.id);
+  });
+
+  test('old single-character costume JSON acquires its character genre', () {
+    final masters = MasterDataStore();
+    final genre = masters.addGenre('作品');
+    final character = masters.addCharacter(genre.id, 'キャラ');
+    final costume = masters.addCostume(
+      '衣装',
+      isGeneral: false,
+      characterId: character.id,
+    );
+    final persistence = AppStatePersistence(
+      store: _MemorySettingsStore(),
+      masters: masters,
+      diary: DiaryStore(),
+      lenses: LensStore(),
+    );
+    final old = jsonDecode(persistence.exportJson()) as Map<String, dynamic>;
+    final row = old['costumes'][0] as Map<String, dynamic>;
+    row.remove('genreId');
+    row.remove('characterIds');
+    persistence.restoreJson(jsonEncode(old));
+    expect(masters.costumes.single.id, costume.id);
+    expect(masters.costumes.single.genreId, genre.id);
+    expect(masters.costumes.single.characterIds, [character.id]);
   });
 }
 

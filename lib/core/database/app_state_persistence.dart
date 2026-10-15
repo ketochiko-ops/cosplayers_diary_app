@@ -107,6 +107,8 @@ class AppStatePersistence {
           'id': e.id,
           'name': e.name,
           'isGeneral': e.isGeneral,
+          'genreId': e.genreId,
+          'characterIds': e.characterIds,
           'characterId': e.characterId,
           'memo': e.memo,
           'archived': e.archived,
@@ -264,6 +266,13 @@ class AppStatePersistence {
             id: raw['id'] as String,
             name: raw['name'] as String,
             isGeneral: raw['isGeneral'] as bool,
+            genreId:
+                raw['genreId'] as String? ??
+                masters.characters
+                    .where((e) => e.id == raw['characterId'])
+                    .firstOrNull
+                    ?.genreId,
+            characterIds: (raw['characterIds'] as List?)?.cast<String>(),
             characterId: raw['characterId'] as String?,
             memo: raw['memo'] as String? ?? '',
             archived: raw['archived'] as bool? ?? false,

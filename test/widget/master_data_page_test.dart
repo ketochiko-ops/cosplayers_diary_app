@@ -16,6 +16,7 @@ void main() {
     final genre = store.addGenre('ウマ娘');
     final character = store.addCharacter(genre.id, 'スペシャルウィーク');
     final other = store.addCharacter(genre.id, 'トウカイテイオー');
+    final unselected = store.addCharacter(genre.id, 'メジロマックイーン');
     final uniform = store.addCostume('制服', isGeneral: true);
     final race = store.addCostume('勝負服', isGeneral: true);
 
@@ -47,24 +48,31 @@ void main() {
     await tester.tap(find.byTooltip('勝負服を編集'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextFormField), '勝負服');
+    await tester.tap(find.text('ジャンル').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('ウマ娘 プリティーダービー').last);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('汎用衣装').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('固有衣装').last);
     await tester.pumpAndSettle();
-    expect(find.text('キャラクターを選択してください'), findsNothing);
+    expect(find.text('対象キャラクターを選択してください'), findsNothing);
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
-    expect(find.text('キャラクターを選択してください'), findsOneWidget);
-    await tester.tap(find.text('対象キャラクター'));
+    expect(find.text('対象キャラクターを選択してください'), findsOneWidget);
+    await tester.ensureVisible(find.text('スペシャルウィーク改').last);
+    await tester.tap(find.text('スペシャルウィーク改').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.textContaining('スペシャルウィーク改').last);
+    await tester.ensureVisible(find.text('トウカイテイオー').last);
+    await tester.tap(find.text('トウカイテイオー').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
 
     expect(store.costumes.last.id, race.id);
     expect(store.costumes.last.isGeneral, isFalse);
-    expect(store.costumes.last.characterId, character.id);
+    expect(store.costumes.last.genreId, genre.id);
+    expect(store.costumes.last.characterIds, [character.id, other.id]);
     expect(store.costumes.first.id, uniform.id);
     expect(store.costumes.first.isGeneral, isTrue);
     const service = MasterDataService();
@@ -77,6 +85,12 @@ void main() {
     expect(
       service
           .costumesForCharacter(store.costumes, other)
+          .map((value) => value.id),
+      [uniform.id, race.id],
+    );
+    expect(
+      service
+          .costumesForCharacter(store.costumes, unselected)
           .map((value) => value.id),
       [uniform.id],
     );
@@ -113,17 +127,21 @@ void main() {
     await tester.tap(find.text('追加'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextFormField), '勝負服');
+    await tester.tap(find.text('ジャンル').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('作品B').last);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('汎用衣装').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('固有衣装').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('対象キャラクター'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.textContaining('作品B · キャラ').last);
+    await tester.ensureVisible(find.text('キャラ').last);
+    await tester.tap(find.text('キャラ').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('追加').last);
     await tester.pumpAndSettle();
     expect(store.costumes.single.characterId, store.characters.single.id);
+    expect(store.costumes.single.genreId, second.id);
     expect(store.costumes.single.isGeneral, isFalse);
     expect(tester.takeException(), isNull);
   });

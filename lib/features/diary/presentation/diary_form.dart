@@ -337,7 +337,8 @@ class _DiaryFormState extends State<DiaryForm> {
     final costume = widget.masterStore.addCostume(
       result.name,
       isGeneral: result.isGeneral,
-      characterId: character.id,
+      genreId: character.genreId,
+      characterIds: result.isGeneral ? const [] : [character.id],
     );
     setState(() => _costumeId = costume.id);
   }

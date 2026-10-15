@@ -83,13 +83,77 @@ void main() {
       expect(find.text('この日に日記を追加'), findsOneWidget);
       await tester.tap(find.byTooltip('次の月'));
       await tester.pumpAndSettle();
-      expect(find.text('2026年 1月'), findsOneWidget);
+      expect(
+        tester
+            .widget<DropdownButton<int>>(
+              find.byKey(const ValueKey('calendar-year')),
+            )
+            .value,
+        2026,
+      );
+      expect(
+        tester
+            .widget<DropdownButton<int>>(
+              find.byKey(const ValueKey('calendar-month')),
+            )
+            .value,
+        1,
+      );
       expect(find.text('この日に日記を追加'), findsNothing);
       await tester.tap(find.byTooltip('前の月'));
       await tester.pumpAndSettle();
-      expect(find.text('2025年 12月'), findsOneWidget);
+      expect(
+        tester
+            .widget<DropdownButton<int>>(
+              find.byKey(const ValueKey('calendar-year')),
+            )
+            .value,
+        2025,
+      );
+      expect(
+        tester
+            .widget<DropdownButton<int>>(
+              find.byKey(const ValueKey('calendar-month')),
+            )
+            .value,
+        12,
+      );
     },
   );
+
+  testWidgets('year and month menus jump and clear the selected day', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CalendarPage(
+            store: DiaryStore(),
+            masterStore: MasterDataStore(),
+            initialMonth: DateTime(2026, 10),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(ValueKey(DateTime(2026, 10, 15))));
+    await tester.pumpAndSettle();
+    expect(find.text('この日に日記を追加'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('calendar-year')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('2030年').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('calendar-month')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('2月').last);
+    await tester.pumpAndSettle();
+    expect(find.byKey(ValueKey(DateTime(2030, 2, 1))), findsOneWidget);
+    expect(find.text('この日に日記を追加'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'six-week calendar scrolls on a short phone with larger text and activity badges',

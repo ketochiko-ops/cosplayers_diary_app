@@ -250,6 +250,8 @@ class CalendarCodec {
         'id',
         'name',
         'isGeneral',
+        'genreId',
+        'characterIds',
         'characterId',
       ]),
     };

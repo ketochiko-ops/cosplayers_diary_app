@@ -49,18 +49,33 @@ class CosplayCharacter {
 }
 
 class Costume {
-  const Costume({
+  Costume({
     required this.id,
     required this.name,
     required this.isGeneral,
-    this.characterId,
+    this.genreId,
+    String? characterId,
+    List<String>? characterIds,
     this.memo = '',
     this.archived = false,
-  }) : assert(isGeneral || characterId != null);
+  }) : characterIds = List.unmodifiable(
+         characterIds ?? (characterId == null ? const [] : [characterId]),
+       ),
+       assert(
+         isGeneral ||
+             characterId != null ||
+             (characterIds?.isNotEmpty ?? false),
+       );
   final String id;
   final String name;
   final bool isGeneral;
-  final String? characterId;
+
+  /// Null only for legacy costumes that were not scoped to a genre.
+  final String? genreId;
+  final List<String> characterIds;
+
+  /// Legacy single-owner view, used only when reading older integrations.
+  String? get characterId => characterIds.firstOrNull;
   final String memo;
   final bool archived;
 
@@ -68,7 +83,8 @@ class Costume {
     id: id,
     name: name ?? this.name,
     isGeneral: isGeneral,
-    characterId: characterId,
+    genreId: genreId,
+    characterIds: characterIds,
     memo: memo ?? this.memo,
     archived: archived ?? this.archived,
   );
