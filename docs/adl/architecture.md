@@ -20,6 +20,7 @@ lib/
     ├── contact_lenses/
     ├── photos/
     ├── backup/
+    ├── calendar_sync/
     ├── dashboard/
     └── settings/
 ```
@@ -74,7 +75,7 @@ Presentation
       └─ AppStatePersistenceが250msデバウンス
           → 全ストアをJSON化
           → SettingsStore(key='app_state_v1')へ保存
-          → 接続中のPWAプロジェクトファイルまたはGoogle Driveへ保存
+          → 指定ファイルモードで接続中のJSONファイルへ保存
 ```
 
 アプリ起動時は逆方向に、JSONを読み、3ストアが保持する公開Listを `clear` + `addAll` で復元します。`AppShell.dispose()` は保留中タイマーを止めた後、最終状態を保存します。
@@ -87,13 +88,27 @@ Presentation
 
 正規化テーブルへの保存を追加する場合は、JSONとの二重書き込みを安易に増やさず、どちらを正本にするかと移行/ロールバックを先に決めます。
 
-Webとネイティブは同じJSON表現とZIPバックアップ形式を使用します。ただしブラウザのサンドボックスからiOSアプリのSQLiteへ直接アクセスできないため、両者間のデータ移行は設定画面のZIP作成・復元で行います。Webの保存領域は公開オリジンごとに分離され、ブラウザデータ削除の対象です。
+Webとネイティブは同じJSONプロジェクト形式を使用します。ただしブラウザのサンドボックスからiOSアプリのSQLiteへ直接アクセスできないため、両者間のデータ移行は設定画面のJSON保存・読み込みで行います。Webの保存領域は公開オリジンごとに分離され、ブラウザデータ削除の対象です。
 
 ### PWAプロジェクト保存
 
-`ProjectSyncController` が外部保存先と前回のrevisionを保持します。設定画面で利用者が明示的にローカルファイルまたはGoogle Driveを接続すると、`AppStatePersistence.onSaved` から同じJSONを外部へ書きます。外部保存に失敗してもブラウザ内の `app_state_v1` は保持し、外部自動保存を停止します。再接続時に端末側か保存先側かを選びます。保存先JSONは一時ストアで形式を検査してから既存ストアへ復元します。
+`ProjectSyncController` が保存モード、外部保存先、前回のrevisionを保持します。PWAの初回（モード未指定時）は `ProjectSetup` の必須ダイアログで指定ファイルモードかブラウザ保存モードを選びます。指定ファイルモードでは作成/読み込みが成功するまで編集不可です。Safariなど非対応ブラウザにはブラウザ保存モードを提供します。異なるファイル内容を読み込んだ場合は以前のプロジェクトの編集routeを閉じます。ネイティブのSQLite保存方式は変更しません。
 
-Web実装は `web/project_storage.js` と `project_storage_web.dart` のJS interopです。ローカルファイルはFile System Access APIの選択済みhandleをIndexedDBに保存します。Google DriveはGoogle Identity Servicesのtoken modelと `drive.file` scopeを使い、アプリが作る `CosplayDiary/CosplayDiary.project.json` をREST APIで読み書きします。アクセストークンはメモリ内だけに置きます。両保存先とも書き込み直前に外部の内容またはversionを確認します。Driveの取得と更新は別リクエストなので、同時更新の完全な原子性はありません。ネイティブではプロジェクト保存機能を公開せず、既存のSQLite/ZIPを利用します。
+`AppStatePersistence.onSaved` が指定ファイルへ同じJSONを書きます。保存失敗時はキャッシュを保持して `requiresSelection` に移行し、AppShellが編集中のrouteの上にも閉じられないダイアログを表示します。5秒周期とアプリ復帰時にファイルの読み込み・権限・revisionを確認し、失敗を検出した場合も再指定を求めます。監視と書き込みは直列化します。
+
+Web実装は `web/project_storage.js` と `project_storage_web.dart` のJS interopです。File System Access APIのhandleをIndexedDBへ保存し、トランザクション完了まで待ちます。起動時に許可済みでキャッシュと同じ内容の場合のみ再接続します。許可要求は利用者のボタン操作で行います。保存先選択前に旧保存処理を排出し、JSONを一時ストアで検証後、端末側/ファイル側のどちらを使うか確認します。書き込み直前に内容一致を確認しますが、他アプリとの完全に原子的な競合防止ではありません。
+
+ブラウザ保存モードでは外部ファイルを読み書きせず、localStorageへ自動保存します。設定画面から手動でJSONの控えをダウンロード・読み込みします。Google Drive連携は削除しています。キャッシュJSONが破損した場合は復旧画面を表示し、保存方法の明示的な再指定が完了するまで通常保存や終了処理で破損データを上書きしません。
+
+### 任意のGoogleカレンダー同期
+
+`AppShell` が `CalendarSyncController` を所有し、設定カードへ渡します。`AppStatePersistence` の追加保存リスナーは外部JSON保存の `onSaved` と共存します。日記と関連マスターの同期対象だけを比較し、接続中の日ごとの初回変更で自動実行、以降は手動です。`Clock` で端末の暦日を計算し、試行前に回数を永続化します。失敗・接続時の初回同期を含め端末・ブラウザごと10回/日で、アカウント切替ではリセットしません。
+
+`CalendarCodec` は純粋Dartで予定・最小限のマスターを変換し、`CalendarPlanner` は前回同期・端末・Googleの3状態を比較します。競合は利用者が選び、Google更新にはETagを使います。履歴のない日記は不在を理由に削除しません。端末側の復元は全件検証してから実施し、通信中の編集を保護します。カラコン使用付き日記の日時変更は停止、削除は台帳経由です。プロジェクト変更時は接続と履歴を解除します。
+
+Web境界は `web/calendar_sync.js` と条件付きJS interopです。GISのOAuthトークンはメモリのみ。`calendar.app.created` と `calendar.calendarlist.readonly` で専用副カレンダーを発見・作成し、その予定だけを読み書きします。新規カレンダーは `selected:false`、非公開・終日・通知なしの予定です。ポーリング・自動リトライはせず、1回100書き込み/一覧20ページまでで停止します。ネイティブは未対応stubです。
+
+同期履歴、回数、設定は `google_calendar_sync_v1` に分離し、プロジェクトJSONに認証・同期履歴は含めません。CIの公開クライアントID変数は `GOOGLE_CALENDAR_CLIENT_ID`。運営者設定と実接続の検証手順は [`../google-calendar.md`](../google-calendar.md) を参照してください。
 
 ## PWA配信
 
@@ -101,47 +116,23 @@ Web実装は `web/project_storage.js` と `project_storage_web.dart` のJS inter
 
 Vercelではドメイン直下用に `--base-href /` でビルドし、`tool/prepare_vercel_output.mjs` が `build/web` をBuild Output API形式の `.vercel/output/static` へ変換します。Build Outputには実ファイルを優先するfilesystemルートと、Flutter Web向けの `index.html` フォールバックを含めます。`.github/workflows/deploy-pwa.yml` はProduction用のprebuilt成果物をステージし、Deployment Protectionを通過する認証付き `vercel curl` のHTTP検証に成功した場合だけ、同じprebuilt成果物を `cosplayers-diary-app` の本番ドメインへ公開します。`vercel.json` はVercelのGit自動デプロイを無効化し、公開経路をこのワークフローへ一本化します。公開URLは `https://cosplayers-diary-app.vercel.app` です。
 
+`pre-develop` のpushは `.github/workflows/deploy-pages.yml` でGitHub Pagesの検証版へ配信します。`configure-pages` の公開パスを `--base-href` に渡し、検証済み `build/web` だけをupload/deployします。成果物は公開成功後に削除、失敗時も1日保持です。連続pushは古いrunをキャンセルします。Pages側のdeploy jobにだけ `pages:write`・`id-token:write`・自身のartifactを削除する `actions:write` を付与し、Vercelの資格情報は使用しません。両ワークフローにブランチのjob条件を付け、手動実行も分離しています。
+
+Pagesの同一オリジン上の別プロジェクトを保護するため、localStorageのキー、IndexedDBのhandle保存DB、Service Workerキャッシュを公開base path/scope単位に分けます。ルート配信の従来の保存キーとDB名は維持します。キャッシュ更新時も別scopeのキャッシュを削除しません。Pagesの初回設定・Google認証の生成元・利用枠は [`../pwa-preview.md`](../pwa-preview.md) を参照してください。
+
 ## SQLite
 
 `AppDatabase.openDefault()` はプラットフォームのDBディレクトリに `cosplayers_diary.db` を開きます。接続時に外部キーを有効にし、`schema.dart` の順序付きmigrationをトランザクション内で適用します。
 
 現在の `databaseVersion` は1です。新しいmigrationは既存versionのstatementを書き換えず、versionを上げて末尾へ追加します。インメモリDB結合テストは `sqflite_common_ffi` を使います。
 
-## ZIPバックアップ
+## JSON保存と旧ZIP移行
 
-作成フロー:
+`BackupCoordinator.create()` は `AppStatePersistence.exportJson()` のUTF-8バイト列を返します。圧縮もCSV同梱も行いません。設定画面は `.project.json` を保存します。
 
-```text
-AppStatePersistence.exportJson()
-  ├─ data/app_state.json
-  └─ BackupCoordinatorが各CSV行へ写像
-      → CsvService.encode(BOM付き)
-          → BackupService.create()
-              ├─ manifest.json
-              └─ ZIP bytes
-```
+読み込み時は通常JSONを検証します。既存データ移行のためZIPヘッダーを検出した場合のみ `BackupService.inspect()` でCRC/ZIP Slip/サイズ/形式/画像件数を検査し、`data/app_state.json` を取り出します。`BackupService` は旧ZIPの読取専用です。新規ZIPの作成コードはありません。
 
-復元フロー:
-
-```text
-ZIP bytes
-  → BackupService.inspect()
-      ├─ CRC検証
-      ├─ ZIP Slip対策
-      ├─ 展開後合計1GiB上限
-      ├─ formatVersion検証
-      └─ imageCount検証
-  → data/app_state.json をrestoreJson()
-  → SettingsStoreへsave()
-```
-
-注意点:
-
-- CSVは人間が確認・将来利用する副産物であり、現行復元処理はCSVを読みません。
-- `character_lenses.csv` と `photos.csv` は定義されますが、現在は常にデータ行が空です。
-- 画像ファイルを列挙してZIPへ渡す構成が未接続なため、現在のバックアップに画像は入りません。
-- `inspect()` はmanifestの `dataCounts` と実ファイルの行数を照合しません。
-- `restoreJson()` のJSON形式エラーは `BackupInspection.errors` へ変換されず例外になるため、復元堅牢化時の確認対象です。
+JSON構造と全レコードの型は一時ストアで検査し、検証が済むまで既存状態を変更しません。保留中の保存を排出後に復元し、キャッシュと指定ファイルへ保存します。写真の画像データはまだ保存対象に含まれません。
 
 ## ファイルと画像
 
@@ -161,9 +152,9 @@ ZIP bytes
 | `image_picker` | 将来の画像選択用。現行UI未接続 |
 | `image` | 向き補正、縮小、JPEG変換 |
 | `path_provider`, `path` | アプリ領域/安全なパス操作 |
-| `archive` | ZIP作成、CRC付き検証・展開 |
-| `file_picker` | ZIP保存先選択、復元元選択 |
+| `archive` | 旧ZIPのCRC付き検証・展開（読取専用） |
+| `file_picker` | JSONの保存先選択、JSON/旧ZIP読み込み元選択 |
 | `csv` | 依存宣言はあるが、現行 `CsvService` は独自パーサー/エンコーダー |
 | `share_plus` | 依存宣言はあるが、現行コードでは未使用 |
 
-通常利用にネットワークや認証は不要です。任意のPWA Google Drive連携時のみGoogle Identity ServicesとDrive REST APIを使用します。分析SDKはありません。
+通常利用にネットワークや認証は不要です。Google Drive連携はありません。任意のWeb/PWAカレンダー連携だけがGoogle Identity ServicesとCalendar APIを使います。分析SDKはありません。

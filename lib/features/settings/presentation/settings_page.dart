@@ -3,23 +3,26 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/database/app_state_persistence.dart';
-import '../../../core/database/project_storage.dart';
 import '../../../core/database/project_sync_controller.dart';
 import '../../../core/database/settings_store.dart';
 import '../../backup/application/backup_coordinator.dart';
 import '../domain/backup_reminder.dart';
+import '../../calendar_sync/application/calendar_sync_controller.dart';
+import '../../calendar_sync/presentation/calendar_sync_card.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({
     required this.settingsStore,
     required this.persistence,
     this.projectSync,
+    this.calendarSync,
     this.onProjectLoaded,
     super.key,
   });
   final SettingsStore? settingsStore;
   final AppStatePersistence? persistence;
   final ProjectSyncController? projectSync;
+  final CalendarSyncController? calendarSync;
   final VoidCallback? onProjectLoaded;
 
   @override
@@ -28,11 +31,9 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   static const _policy = BackupReminderPolicy();
-  static const _googleClientId = String.fromEnvironment(
-    'GOOGLE_OAUTH_CLIENT_ID',
-  );
   DateTime? _lastBackup;
   String _photoMode = 'spaceSaving';
+  bool _working = false;
 
   @override
   void initState() {
@@ -63,22 +64,16 @@ class _SettingsPageState extends State<SettingsPage> {
       padding: const EdgeInsets.all(16),
       children: [
         if (kIsWeb)
-          Card(
-            color: Theme.of(context).colorScheme.primaryContainer,
-            child: const ListTile(
+          const Card(
+            child: ListTile(
               leading: Icon(Icons.install_mobile_outlined),
               title: Text('ホーム画面に追加して利用できます'),
-              subtitle: Text(
-                'データはこのブラウザ内に保存されます。外部保存は下で任意に設定できます。端末変更やブラウザデータ削除に備えて、定期的にZIPバックアップを作成してください。',
-              ),
+              subtitle: Text('保存モードは下で変更できます。データ交換には圧縮しないJSONファイルを使用します。'),
             ),
           ),
-        if (kIsWeb && widget.projectSync != null) ...[
+        if ((kIsWeb || widget.projectSync?.storage.supportsLocalFile == true) &&
+            widget.projectSync != null) ...[
           Text('プロジェクト保存', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 8),
-          const Text(
-            'データ更新時に選択した保存先へ自動保存します。別の端末で更新された場合は停止し、再接続時に使用する内容を選べます。',
-          ),
           const SizedBox(height: 8),
           AnimatedBuilder(
             animation: widget.projectSync!,
@@ -88,59 +83,19 @@ class _SettingsPageState extends State<SettingsPage> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    sync.target == null
-                        ? (sync.preferredTarget?.isNotEmpty ?? false)
-                              ? '前回の保存先は未接続です。再接続してください。'
-                              : 'プロジェクト保存は未設定です。'
-                        : '${sync.name} に自動保存中',
-                  ),
-                  if (sync.message != null)
-                    Text(
-                      sync.message!,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                    ),
-                  if (sync.target != null)
-                    OutlinedButton(
-                      onPressed: sync.busy ? null : _disconnectProject,
-                      child: const Text('プロジェクト保存を切断'),
-                    ),
-                  if (sync.target == null &&
-                      sync.storage.supportsLocalFile) ...[
-                    FilledButton.tonal(
-                      onPressed: sync.busy ? null : _createLocalProject,
-                      child: const Text('ローカルに新しいプロジェクトを保存'),
-                    ),
-                    OutlinedButton(
-                      onPressed: sync.busy ? null : _openLocalProject,
-                      child: const Text('既存のプロジェクトファイルを開く'),
-                    ),
-                    if (sync.preferredTarget == ProjectTarget.localFile.name)
-                      TextButton(
-                        onPressed: sync.busy ? null : _reconnectLocalProject,
-                        child: const Text('前回のローカルファイルに再接続'),
-                      ),
-                  ],
-                  if (!sync.storage.supportsLocalFile)
-                    const Text(
-                      'このブラウザではファイルへの自動上書きに対応していません。Google Drive連携またはZIPバックアップを利用できます。',
-                    ),
-                  const SizedBox(height: 12),
-                  OutlinedButton.icon(
-                    onPressed:
-                        sync.busy ||
-                            sync.target != null ||
-                            _googleClientId.isEmpty
-                        ? null
-                        : _connectDrive,
-                    icon: const Icon(Icons.cloud_outlined),
-                    label: const Text('Google Driveに接続'),
+                    sync.browserMode
+                        ? 'ブラウザ保存モード（Safari対応）'
+                        : '指定ファイルへ自動保存: ${sync.name ?? "未指定"}',
                   ),
                   Text(
-                    _googleClientId.isEmpty
-                        ? 'Google Drive連携はサイト運営者による設定待ちです。'
-                        : '自分のGoogleアカウントで接続します。Drive上の「CosplayDiary/CosplayDiary.project.json」を使用します。',
+                    sync.browserMode
+                        ? '変更内容はこのブラウザ内へ自動保存します。外部ファイルへの保存は「JSONファイルの控えを保存」で行ってください。'
+                        : '変更のたびに指定したJSONファイルへ自動保存します。保存先にアクセスできない場合は、その場で再指定を求めます。',
+                  ),
+                  if (sync.message != null) Text(sync.message!),
+                  OutlinedButton(
+                    onPressed: _working || sync.busy ? null : _changeMode,
+                    child: const Text('保存モード・プロジェクトファイルを変更'),
                   ),
                 ],
               );
@@ -148,13 +103,18 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           const SizedBox(height: 24),
         ],
+        if (widget.calendarSync != null) ...[
+          CalendarSyncCard(sync: widget.calendarSync!),
+          const SizedBox(height: 24),
+        ],
         if (due)
-          Card(
-            color: Theme.of(context).colorScheme.secondaryContainer,
-            child: const ListTile(
+          const Card(
+            child: ListTile(
               leading: Icon(Icons.backup_outlined),
-              title: Text('バックアップを作成してください'),
-              subtitle: Text('前回から30日以上経過、または未作成です。通常利用はそのまま続けられます。'),
+              title: Text('JSONファイルの控えを保存してください'),
+              subtitle: Text(
+                '前回から30日以上経過、または未作成です。端末変更やブラウザデータ削除に備えて保存してください。',
+              ),
             ),
           ),
         Text('写真', style: Theme.of(context).textTheme.titleLarge),
@@ -176,179 +136,112 @@ class _SettingsPageState extends State<SettingsPage> {
           },
         ),
         const SizedBox(height: 24),
-        Text('バックアップ', style: Theme.of(context).textTheme.titleLarge),
+        Text('プロジェクトの控え・読み込み', style: Theme.of(context).textTheme.titleLarge),
         ListTile(
           contentPadding: EdgeInsets.zero,
-          title: const Text('最終バックアップ'),
+          title: const Text('最後に控えの保存を実行した日時'),
           subtitle: Text(
             _lastBackup == null ? '未作成' : _lastBackup!.toLocal().toString(),
           ),
         ),
         FilledButton.icon(
-          onPressed: widget.persistence == null ? null : _create,
-          icon: const Icon(Icons.archive_outlined),
-          label: const Text('ZIPバックアップを作成'),
+          onPressed: widget.persistence == null || _working ? null : _create,
+          icon: const Icon(Icons.save_alt),
+          label: const Text('JSONファイルの控えを保存'),
         ),
         const SizedBox(height: 8),
         OutlinedButton.icon(
-          onPressed: widget.persistence == null ? null : _restore,
+          onPressed: widget.persistence == null || _working ? null : _restore,
           icon: const Icon(Icons.restore),
-          label: const Text('ZIPから復元'),
+          label: const Text('プロジェクトJSONを読み込む'),
         ),
         const SizedBox(height: 12),
-        const Text('バックアップにはCSVとアプリ状態が含まれます。復元前にZIP構造・形式バージョン・パス・サイズを検証します。'),
+        const Text(
+          '圧縮しないJSONに日記・マスター・カラコンのデータを保存します。画像データは含みません。以前のZIPバックアップも移行用に読み込めます。読み込み前に形式を検証します。',
+        ),
       ],
     );
   }
 
+  Future<void> _changeMode() async {
+    try {
+      await widget.projectSync!.disconnect();
+    } catch (error) {
+      _message('保存方法を変更できませんでした: $error');
+    }
+  }
+
   Future<void> _create() async {
-    final now = DateTime.now();
-    final bytes = BackupCoordinator(widget.persistence!).create(now);
-    final uri = await FilePicker.saveFile(
-      fileName:
-          'CosplayDiary_Backup_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}.zip',
-      bytes: bytes,
-      mimeType: 'application/zip',
-      dialogTitle: 'バックアップの保存先を選択',
-    );
-    if (uri == null) return;
-    await widget.settingsStore!.writeSetting(
-      'last_backup_at',
-      now.toIso8601String(),
-    );
-    if (mounted) {
-      setState(() => _lastBackup = now);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('バックアップを保存しました')));
+    setState(() => _working = true);
+    try {
+      final now = DateTime.now();
+      final bytes = BackupCoordinator(widget.persistence!).create();
+      final uri = await FilePicker.saveFile(
+        fileName:
+            'CosplayDiary_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}.project.json',
+        bytes: bytes,
+        mimeType: 'application/json',
+        dialogTitle: 'プロジェクトJSONの保存先を選択',
+      );
+      // Web starts a download and returns null; native null means cancellation.
+      if (uri == null && !kIsWeb) return;
+      await widget.settingsStore!.writeSetting(
+        'last_backup_at',
+        now.toIso8601String(),
+      );
+      if (mounted) setState(() => _lastBackup = now);
+      _message(
+        kIsWeb ? 'JSONのダウンロードを開始しました。保存先でファイルを確認してください。' : 'JSONファイルを保存しました',
+      );
+    } catch (error) {
+      _message('JSONファイルを保存できませんでした: $error');
+    } finally {
+      if (mounted) setState(() => _working = false);
     }
   }
 
   Future<void> _restore() async {
-    final picked = await FilePicker.pickFile(
-      type: FileType.custom,
-      allowedExtensions: const ['zip'],
-    );
-    if (picked == null || !mounted) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('バックアップを復元しますか？'),
-        content: const Text('検証に成功した場合、現在の登録内容をバックアップの内容で置換します。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('キャンセル'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('検証して復元'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    final result = await BackupCoordinator(widget.persistence!)
-        .restore(await picked.readAsBytes());
-    if (!mounted) return;
-    final message = result.isValid ? '復元しました' : result.errors.join('\n');
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
-    setState(() {});
-  }
-
-  Future<void> _createLocalProject() => _chooseProject(
-    ProjectTarget.localFile,
-    widget.projectSync!.createLocalFile,
-  );
-
-  Future<void> _openLocalProject() => _chooseProject(
-    ProjectTarget.localFile,
-    widget.projectSync!.openLocalFile,
-  );
-
-  Future<void> _reconnectLocalProject() => _chooseProject(
-    ProjectTarget.localFile,
-    widget.projectSync!.reconnectLocalFile,
-  );
-
-  Future<void> _connectDrive() async {
+    setState(() => _working = true);
     try {
-      final snapshot = await widget.projectSync!.connectGoogleDrive(
-        _googleClientId,
+      final picked = await FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: const ['json', 'zip'],
       );
-      await _resolveProject(ProjectTarget.googleDrive, snapshot);
-    } catch (error) {
-      _showProjectMessage('Google Driveへの接続に失敗しました: $error');
-    }
-  }
-
-  Future<void> _chooseProject(
-    ProjectTarget target,
-    Future<ProjectSnapshot?> Function() choose,
-  ) async {
-    try {
-      final snapshot = await choose();
-      if (snapshot == null) return;
-      await _resolveProject(target, snapshot);
-    } catch (error) {
-      _showProjectMessage('プロジェクトを開けませんでした: $error');
-    }
-  }
-
-  Future<void> _resolveProject(
-    ProjectTarget target,
-    ProjectSnapshot snapshot,
-  ) async {
-    if (!mounted) return;
-    final sync = widget.projectSync!;
-    final current = widget.persistence!.exportJson();
-    if (snapshot.content == null || snapshot.content == current) {
-      await sync.uploadCurrent(target, snapshot);
-      _showProjectMessage('プロジェクトを接続しました');
-      return;
-    }
-    final choice = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('使用するデータを選択'),
-        content: const Text(
-          '保存先とこの端末の内容が異なります。どちらか一方の内容で置き換えます。必要なら先にZIPバックアップを作成してください。',
+      if (picked == null || !mounted) return;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('プロジェクトを読み込みますか？'),
+          content: const Text(
+            '検証に成功した場合、現在の登録内容を置き換えます。指定ファイルモードでは、現在の自動保存先もこの内容に更新します。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('キャンセル'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('検証して読み込む'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('キャンセル'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('保存先を読み込む'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('この端末を保存先へ書き込む'),
-          ),
-        ],
-      ),
-    );
-    if (choice == null) return;
-    if (choice) {
-      await sync.useProject(target, snapshot);
-      widget.onProjectLoaded?.call();
-    } else {
-      await sync.uploadCurrent(target, snapshot);
-    }
-    _showProjectMessage('プロジェクトを接続しました');
-  }
-
-  Future<void> _disconnectProject() async {
-    try {
-      await widget.projectSync!.disconnect();
+      );
+      if (confirmed != true) return;
+      final result = await BackupCoordinator(widget.persistence!)
+          .restore(await picked.readAsBytes());
+      if (!mounted) return;
+      _message(result.isValid ? '読み込みました' : result.errors.join('\n'));
+      if (result.isValid) widget.onProjectLoaded?.call();
+      setState(() {});
     } catch (error) {
-      _showProjectMessage('切断できませんでした: $error');
+      _message('プロジェクトを読み込めませんでした: $error');
+    } finally {
+      if (mounted) setState(() => _working = false);
     }
   }
 
-  void _showProjectMessage(String message) {
+  void _message(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(message)));

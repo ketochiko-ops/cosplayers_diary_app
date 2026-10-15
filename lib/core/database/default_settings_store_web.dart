@@ -3,7 +3,14 @@ import 'package:web/web.dart' as web;
 import 'settings_store.dart';
 
 class WebSettingsStore implements SettingsStore {
-  static const _prefix = 'cosplayers_diary.';
+  // GitHub Pages projects share an origin; keep each base path independent.
+  // Preserve the existing root-hosted production keys.
+  static String get _prefix {
+    final basePath = Uri.parse(web.document.baseURI).path;
+    return basePath == '/'
+        ? 'cosplayers_diary.'
+        : 'cosplayers_diary.$basePath.';
+  }
 
   @override
   Future<String?> readSetting(String key) async =>

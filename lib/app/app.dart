@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
 import 'router.dart';
 import 'theme.dart';
@@ -15,40 +16,55 @@ import '../core/database/project_storage.dart';
 import '../core/database/project_sync_controller.dart';
 import '../core/database/settings_store.dart';
 import '../features/settings/presentation/settings_page.dart';
+import '../features/settings/presentation/project_setup.dart';
+import '../features/calendar_sync/application/calendar_sync_controller.dart';
+import '../features/calendar_sync/infrastructure/calendar_transport.dart';
 
 class CosplayDiaryApp extends StatelessWidget {
-  const CosplayDiaryApp({this.settingsStore, super.key});
+  const CosplayDiaryApp({this.settingsStore, this.projectStorage, super.key});
   final SettingsStore? settingsStore;
+  final ProjectStorage? projectStorage;
 
   @override
   Widget build(BuildContext context) => MaterialApp(
     title: 'コスプレ日記',
     debugShowCheckedModeBanner: false,
     theme: buildAppTheme(),
-    home: AppShell(settingsStore: settingsStore),
+    home: AppShell(
+      settingsStore: settingsStore,
+      projectStorage: projectStorage,
+    ),
   );
 }
 
 class AppShell extends StatefulWidget {
-  const AppShell({this.settingsStore, super.key});
+  const AppShell({this.settingsStore, this.projectStorage, super.key});
   final SettingsStore? settingsStore;
+  final ProjectStorage? projectStorage;
 
   @override
   State<AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends State<AppShell> {
+class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   int _index = 0;
   final _masterStore = MasterDataStore();
   final _diaryStore = DiaryStore();
   final _lensStore = LensStore();
   AppStatePersistence? _persistence;
   ProjectSyncController? _projectSync;
+  CalendarSyncController? _calendarSync;
+  int _projectVersion = 0;
   bool _loading = false;
+  bool _setupOpen = false;
+  bool _setupScheduled = false;
+  Timer? _fileMonitor;
+  bool get _requiresProject => kIsWeb || widget.projectStorage != null;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     if (widget.settingsStore != null) {
       _loading = true;
       _persistence = AppStatePersistence(
@@ -60,22 +76,111 @@ class _AppShellState extends State<AppShell> {
       _projectSync = ProjectSyncController(
         persistence: _persistence!,
         settings: widget.settingsStore!,
-        storage: createProjectStorage(),
+        storage: widget.projectStorage ?? createProjectStorage(),
       );
+      _calendarSync = CalendarSyncController(
+        persistence: _persistence!,
+        settings: widget.settingsStore!,
+        transport: createCalendarTransport(),
+        canSync: () =>
+            mounted &&
+            !_loading &&
+            !_setupOpen &&
+            (!_requiresProject || !_projectSync!.requiresSelection) &&
+            !Navigator.of(context).canPop(),
+        onRemoteChanged: () {
+          if (mounted) setState(() {});
+        },
+      );
+      _projectSync!.addListener(_projectChanged);
       unawaited(_load());
     }
   }
 
   Future<void> _load() async {
-    await _persistence!.load();
+    Object? cacheError;
+    try {
+      await _persistence!.load();
+    } catch (error) {
+      if (!_requiresProject) rethrow;
+      cacheError = error;
+    }
     await _projectSync!.loadPreference();
-    await _projectSync!.tryResumeLocalFile();
+    if (cacheError != null) {
+      _projectSync!.reportCacheError(cacheError);
+    } else if (_requiresProject) {
+      await _projectSync!.tryResumeLocalFile();
+    }
+    await _calendarSync!.load();
     _persistence!.attach();
-    if (mounted) setState(() => _loading = false);
+    if (!mounted) return;
+    setState(() => _loading = false);
+    if (_requiresProject) {
+      _fileMonitor = Timer.periodic(const Duration(seconds: 5), (_) {
+        unawaited(_projectSync!.checkFile());
+      });
+      _projectChanged();
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _requiresProject && !_loading) {
+      unawaited(_projectSync?.checkFile());
+    }
+  }
+
+  void _projectChanged() {
+    if (!mounted || _loading || !_requiresProject) return;
+    if (_projectVersion != _projectSync!.loadedProjectVersion) {
+      _projectVersion = _projectSync!.loadedProjectVersion;
+      unawaited(_calendarSync?.disconnect(projectChanged: true));
+    }
+    setState(() {});
+    if (!_projectSync!.requiresSelection || _setupOpen || _setupScheduled) {
+      return;
+    }
+    _setupScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      _setupScheduled = false;
+      if (!mounted || !_projectSync!.requiresSelection || _setupOpen) return;
+      _setupOpen = true;
+      final loadedVersion = _projectSync!.loadedProjectVersion;
+      // Root navigator places recovery above an open diary editor as well.
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => PopScope(
+          canPop: false,
+          child: AlertDialog(
+            title: const Text('プロジェクトの保存方法'),
+            content: SizedBox(
+              width: 520,
+              child: SingleChildScrollView(
+                child: ProjectSetup(
+                  sync: _projectSync!,
+                  onReady: () => Navigator.of(context).pop(),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      _setupOpen = false;
+      if (mounted && _projectSync!.loadedProjectVersion != loadedVersion) {
+        // An editor for the previous project must not write into the new one.
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
+      _projectChanged();
+    });
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _fileMonitor?.cancel();
+    _projectSync?.removeListener(_projectChanged);
+    _calendarSync?.dispose();
     if (_persistence != null) {
       unawaited(
         _persistence!.dispose().whenComplete(() => _projectSync?.dispose()),
@@ -92,6 +197,9 @@ class _AppShellState extends State<AppShell> {
     if (_loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
+    if (_requiresProject && (_projectSync?.requiresSelection ?? false)) {
+      return const Scaffold(body: Center(child: Text('プロジェクトの保存方法を指定してください')));
+    }
     final wide = MediaQuery.sizeOf(context).width >= 600;
     final body = switch (_index) {
       0 => CalendarPage(store: _diaryStore, masterStore: _masterStore),
@@ -106,7 +214,11 @@ class _AppShellState extends State<AppShell> {
         settingsStore: widget.settingsStore,
         persistence: _persistence,
         projectSync: _projectSync,
-        onProjectLoaded: () => setState(() {}),
+        calendarSync: _calendarSync,
+        onProjectLoaded: () {
+          unawaited(_calendarSync?.disconnect(projectChanged: true));
+          setState(() {});
+        },
       ),
       _ => PlaceholderFeaturePage(title: pageTitles[_index]),
     };

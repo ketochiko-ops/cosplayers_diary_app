@@ -1,0 +1,84 @@
+name: Deploy pre-develop PWA to GitHub Pages
+
+on:
+  push:
+    branches:
+      - pre-develop
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: github-pages-pre-develop
+  cancel-in-progress: true
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/pre-develop'
+    outputs:
+      artifact_id: ${{ steps.upload.outputs.artifact_id }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pages: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Read Pages URL
+        id: pages
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+          flutter-version: 3.47.5
+          cache: true
+      - run: flutter pub get
+      - run: dart format --output=none --set-exit-if-changed lib test
+      - run: flutter analyze
+      - run: flutter test
+      - run: node tool/calendar_sync_test.mjs
+      - run: node tool/project_storage_test.mjs
+      - run: node tool/service_worker_test.mjs
+      - name: Build and verify Pages PWA
+        env:
+          PAGES_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+          GOOGLE_CALENDAR_CLIENT_ID: ${{ vars.GOOGLE_CALENDAR_PREVIEW_CLIENT_ID || vars.GOOGLE_CALENDAR_CLIENT_ID }}
+        run: |
+          set -euo pipefail
+          flutter build web --release --pwa-strategy=none \
+            --base-href "${PAGES_BASE_PATH}/" \
+            --dart-define=GOOGLE_CALENDAR_CLIENT_ID="$GOOGLE_CALENDAR_CLIENT_ID"
+          node tool/verify_pwa.mjs build/web "${PAGES_BASE_PATH}/"
+          printf 'User-agent: *\nDisallow: /\n' > build/web/robots.txt
+      - name: Upload verified PWA
+        id: upload
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
+        with:
+          path: build/web
+          retention-days: 1
+
+  deploy:
+    if: github.ref == 'refs/heads/pre-develop'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: write
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publish preview to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
+      - name: Remove deployed build artifact
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ needs.build.outputs.artifact_id }}
+        run: gh api --method DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID"

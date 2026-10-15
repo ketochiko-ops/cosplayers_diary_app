@@ -12,13 +12,10 @@ external JSPromise<JSString?> _openLocalFile();
 external JSPromise<JSString?> _createLocalFile(JSString content);
 
 @JS('cosplayProjectStorage.reconnectLocalFile')
-external JSPromise<JSString?> _reconnectLocalFile();
+external JSPromise<JSString?> _reconnectLocalFile(JSBoolean requestPermission);
 
-@JS('cosplayProjectStorage.connectGoogleDrive')
-external JSPromise<JSString> _connectGoogleDrive(JSString clientId);
-
-@JS('cosplayProjectStorage.createGoogleDrive')
-external JSPromise<JSString> _createGoogleDrive(JSString content);
+@JS('cosplayProjectStorage.readLocalFile')
+external JSPromise<JSString> _readLocalFile();
 
 @JS('cosplayProjectStorage.writeLocalFile')
 external JSPromise<JSString> _writeLocalFile(
@@ -26,25 +23,14 @@ external JSPromise<JSString> _writeLocalFile(
   JSString expectedRevision,
 );
 
-@JS('cosplayProjectStorage.writeGoogleDrive')
-external JSPromise<JSString> _writeGoogleDrive(
-  JSString content,
-  JSString expectedRevision,
-);
-
 @JS('cosplayProjectStorage.disconnectLocalFile')
 external JSPromise<JSAny?> _disconnectLocalFile();
-
-@JS('cosplayProjectStorage.disconnectGoogleDrive')
-external JSPromise<JSAny?> _disconnectGoogleDrive();
 
 ProjectStorage createProjectStorage() => _WebProjectStorage();
 
 class _WebProjectStorage implements ProjectStorage {
   @override
   bool get supportsLocalFile => _supportsLocalFile;
-  @override
-  bool get supportsGoogleDrive => true;
 
   @override
   Future<ProjectSnapshot?> openLocalFile() async =>
@@ -55,20 +41,14 @@ class _WebProjectStorage implements ProjectStorage {
       _optional(await _createLocalFile(content.toJS).toDart);
 
   @override
-  Future<ProjectSnapshot?> reconnectLocalFile() async =>
-      _optional(await _reconnectLocalFile().toDart);
+  Future<ProjectSnapshot?> reconnectLocalFile({
+    bool requestPermission = false,
+  }) async =>
+      _optional(await _reconnectLocalFile(requestPermission.toJS).toDart);
 
   @override
-  Future<ProjectSnapshot> connectGoogleDrive(String clientId) async =>
-      ProjectSnapshot.fromJson(
-        (await _connectGoogleDrive(clientId.toJS).toDart).toDart,
-      );
-
-  @override
-  Future<ProjectSnapshot> createGoogleDrive(String content) async =>
-      ProjectSnapshot.fromJson(
-        (await _createGoogleDrive(content.toJS).toDart).toDart,
-      );
+  Future<ProjectSnapshot> readLocalFile() async =>
+      ProjectSnapshot.fromJson((await _readLocalFile().toDart).toDart);
 
   @override
   Future<ProjectSnapshot> write(
@@ -76,25 +56,16 @@ class _WebProjectStorage implements ProjectStorage {
     String content,
     String? expectedRevision,
   ) async {
-    final result = target == ProjectTarget.localFile
-        ? await _writeLocalFile(
-            content.toJS,
-            (expectedRevision ?? '').toJS,
-          ).toDart
-        : await _writeGoogleDrive(
-            content.toJS,
-            (expectedRevision ?? '').toJS,
-          ).toDart;
+    final result = await _writeLocalFile(
+      content.toJS,
+      (expectedRevision ?? '').toJS,
+    ).toDart;
     return ProjectSnapshot.fromJson(result.toDart);
   }
 
   @override
   Future<void> disconnect(ProjectTarget target) async {
-    if (target == ProjectTarget.localFile) {
-      await _disconnectLocalFile().toDart;
-    } else {
-      await _disconnectGoogleDrive().toDart;
-    }
+    await _disconnectLocalFile().toDart;
   }
 
   ProjectSnapshot? _optional(JSString? source) =>

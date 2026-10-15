@@ -1,13 +1,11 @@
 'use strict';
 
-// Only the user-selected file handle is kept in IndexedDB. OAuth tokens stay in memory.
+// Persist only the user-selected file handle; project contents are plain JSON.
 window.cosplayProjectStorage = (() => {
-  const folderName = 'CosplayDiary';
   const fileName = 'CosplayDiary.project.json';
-  const driveScope = 'https://www.googleapis.com/auth/drive.file';
+  const basePath = new URL('.', document.baseURI).pathname;
+  const databaseName = basePath === '/' ? 'cosplay-diary-project' : `cosplay-diary-project:${basePath}`;
   let localHandle = null;
-  let driveToken = null;
-  let driveFileId = null;
 
   function snapshot(content, revision, name) {
     return JSON.stringify({ content, revision, name });
@@ -22,7 +20,7 @@ window.cosplayProjectStorage = (() => {
 
   function openDatabase() {
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open('cosplay-diary-project', 1);
+      const request = indexedDB.open(databaseName, 1);
       request.onupgradeneeded = () => request.result.createObjectStore('handles');
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
@@ -37,9 +35,10 @@ window.cosplayProjectStorage = (() => {
       const request = value === undefined
         ? store.get('project')
         : value === null ? store.delete('project') : store.put(value, 'project');
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-      transaction.oncomplete = () => database.close();
+      let result;
+      request.onsuccess = () => { result = request.result; };
+      transaction.oncomplete = () => { database.close(); resolve(result); };
+      transaction.onerror = transaction.onabort = () => { database.close(); reject(transaction.error || request.error); };
     });
   }
 
@@ -50,32 +49,47 @@ window.cosplayProjectStorage = (() => {
   }
 
   async function openLocalFile() {
-    const [handle] = await window.showOpenFilePicker({ types: projectType(), multiple: false });
-    localHandle = handle;
-    await storedHandle(handle);
-    return readLocal(handle);
+    try {
+      const [handle] = await window.showOpenFilePicker({ types: projectType(), multiple: false });
+      if (await handle.queryPermission({ mode: 'readwrite' }) !== 'granted' &&
+          await handle.requestPermission({ mode: 'readwrite' }) !== 'granted') {
+        throw new Error('ファイルへの書き込みが許可されていません');
+      }
+      const result = await readLocal(handle);
+      await storedHandle(handle);
+      localHandle = handle;
+      return result;
+    } catch (error) {
+      if (error.name === 'AbortError') return null;
+      throw error;
+    }
   }
 
   async function createLocalFile(content) {
-    const handle = await window.showSaveFilePicker({
-      suggestedName: fileName,
-      types: projectType(),
-    });
-    const writable = await handle.createWritable();
-    await writable.write(content);
-    await writable.close();
-    localHandle = handle;
-    await storedHandle(handle);
-    return snapshot(content, content, handle.name);
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: fileName,
+        types: projectType(),
+      });
+      const writable = await handle.createWritable();
+      await writable.write(content);
+      await writable.close();
+      localHandle = handle;
+      await storedHandle(handle);
+      return snapshot(content, content, handle.name);
+    } catch (error) {
+      if (error.name === 'AbortError') return null;
+      throw error;
+    }
   }
 
-  async function reconnectLocalFile() {
+  async function reconnectLocalFile(requestPermission = false) {
     const handle = await storedHandle();
     if (!handle) return null;
     const permission = await handle.queryPermission({ mode: 'readwrite' });
-    if (permission !== 'granted' &&
-        await handle.requestPermission({ mode: 'readwrite' }) !== 'granted') {
-      throw new Error('ファイルへのアクセスが許可されていません');
+    if (permission !== 'granted' && (!requestPermission ||
+        await handle.requestPermission({ mode: 'readwrite' }) !== 'granted')) {
+      throw new Error('ファイルへのアクセスを許可するため再指定してください');
     }
     localHandle = handle;
     return readLocal(handle);
@@ -98,142 +112,6 @@ window.cosplayProjectStorage = (() => {
     await storedHandle(null);
   }
 
-  function authorize(clientId) {
-    if (!window.google?.accounts?.oauth2) {
-      throw new Error('Google認証ライブラリを読み込めません。オンラインで再試行してください');
-    }
-    return new Promise((resolve, reject) => {
-      const client = google.accounts.oauth2.initTokenClient({
-        client_id: clientId,
-        scope: driveScope,
-        callback: (response) => {
-          if (response.error || !response.access_token ||
-              !google.accounts.oauth2.hasGrantedAllScopes(response, driveScope)) {
-            reject(new Error(response.error_description || 'Driveへのアクセスが許可されませんでした'));
-            return;
-          }
-          driveToken = response.access_token;
-          resolve();
-        },
-        error_callback: (error) => reject(new Error(error.message || error.type || 'Google認証に失敗しました')),
-      });
-      client.requestAccessToken({ prompt: 'select_account' });
-    });
-  }
-
-  async function driveRequest(url, options = {}) {
-    if (!driveToken) throw new Error('Google Driveを再接続してください');
-    const headers = new Headers(options.headers || {});
-    headers.set('Authorization', `Bearer ${driveToken}`);
-    const response = await fetch(url, { ...options, headers });
-    if (response.status === 401) {
-      driveToken = null;
-      throw new Error('Google認証の期限が切れました。再接続してください');
-    }
-    if (!response.ok) {
-      throw new Error(`Google Driveでエラーが発生しました (${response.status})`);
-    }
-    return response;
-  }
-
-  async function listFiles(query) {
-    const parameters = new URLSearchParams({
-      q: query,
-      fields: 'nextPageToken,files(id,name,version)',
-      spaces: 'drive',
-      pageSize: '100',
-    });
-    const response = await driveRequest(`https://www.googleapis.com/drive/v3/files?${parameters}`);
-    const data = await response.json();
-    return data.files || [];
-  }
-
-  async function folderId(create) {
-    const folders = await listFiles(
-      "name = 'CosplayDiary' and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
-    );
-    if (folders.length) return folders[0].id;
-    if (!create) return null;
-    const response = await driveRequest('https://www.googleapis.com/drive/v3/files?fields=id', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: folderName, mimeType: 'application/vnd.google-apps.folder' }),
-    });
-    return (await response.json()).id;
-  }
-
-  async function projectMetadata(createFolder) {
-    const parent = await folderId(createFolder);
-    if (!parent) return { parent, file: null };
-    const files = await listFiles(
-      `'${parent}' in parents and name = '${fileName}' and trashed = false`,
-    );
-    return { parent, file: files[0] || null };
-  }
-
-  async function readDrive(file) {
-    const response = await driveRequest(
-      `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(file.id)}?alt=media`,
-    );
-    return snapshot(await response.text(), file.version, file.name);
-  }
-
-  async function connectGoogleDrive(clientId) {
-    await authorize(clientId);
-    const { file } = await projectMetadata(false);
-    driveFileId = file?.id || null;
-    return file ? readDrive(file) : snapshot(null, null, fileName);
-  }
-
-  async function createGoogleDrive(content) {
-    const { parent, file } = await projectMetadata(true);
-    if (file) throw new Error('Drive上に既にプロジェクトがあります。再接続してください');
-    const boundary = `cosplayDiary${Date.now()}`;
-    const body = new Blob([
-      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n`,
-      JSON.stringify({ name: fileName, parents: [parent], mimeType: 'application/json' }),
-      `\r\n--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n`,
-      content,
-      `\r\n--${boundary}--`,
-    ]);
-    const response = await driveRequest(
-      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,version',
-      { method: 'POST', headers: { 'Content-Type': `multipart/related; boundary=${boundary}` }, body },
-    );
-    const created = await response.json();
-    driveFileId = created.id;
-    return snapshot(content, created.version, created.name);
-  }
-
-  async function writeGoogleDrive(content, expectedRevision) {
-    if (!driveFileId) throw new Error('Google Driveを再接続してください');
-    const metadataResponse = await driveRequest(
-      `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(driveFileId)}?fields=id,name,version`,
-    );
-    const metadata = await metadataResponse.json();
-    if (metadata.version !== expectedRevision) {
-      throw new Error('Drive上のプロジェクトが別の端末で更新されました。再接続して内容を選んでください');
-    }
-    const response = await driveRequest(
-      `https://www.googleapis.com/upload/drive/v3/files/${encodeURIComponent(driveFileId)}?uploadType=media&fields=id,name,version`,
-      {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json; charset=UTF-8' },
-        body: content,
-      },
-    );
-    const updated = await response.json();
-    return snapshot(content, updated.version, updated.name);
-  }
-
-  async function disconnectGoogleDrive() {
-    if (driveToken && window.google?.accounts?.oauth2) {
-      google.accounts.oauth2.revoke(driveToken);
-    }
-    driveToken = null;
-    driveFileId = null;
-  }
-
   return {
     get supportsLocalFile() {
       return 'showOpenFilePicker' in window && 'showSaveFilePicker' in window;
@@ -241,11 +119,14 @@ window.cosplayProjectStorage = (() => {
     openLocalFile,
     createLocalFile,
     reconnectLocalFile,
+    readLocalFile: async () => {
+      if (!localHandle) throw new Error('プロジェクトファイルを再指定してください');
+      if (await localHandle.queryPermission({ mode: 'readwrite' }) !== 'granted') {
+        throw new Error('ファイルへのアクセス権限がありません。再指定してください');
+      }
+      return readLocal(localHandle);
+    },
     writeLocalFile,
     disconnectLocalFile,
-    connectGoogleDrive,
-    createGoogleDrive,
-    writeGoogleDrive,
-    disconnectGoogleDrive,
   };
 })();

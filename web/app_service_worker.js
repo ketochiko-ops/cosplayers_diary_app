@@ -1,11 +1,13 @@
 'use strict';
 
-const CACHE_NAME = 'cosplayers-diary-pwa-v2';
+const CACHE_PREFIX = `cosplayers-diary-pwa:${self.registration.scope}:`;
+const CACHE_NAME = `${CACHE_PREFIX}v5`;
 const APP_SHELL = [
   './',
   'index.html',
   'flutter_bootstrap.js',
   'project_storage.js',
+  'calendar_sync.js',
   'flutter.js',
   'main.dart.js',
   'manifest.json',
@@ -56,8 +58,9 @@ self.addEventListener('activate', function (event) {
         return Promise.all(
           names
             .filter(function (name) {
-              return name.startsWith('cosplayers-diary-pwa-') &&
-                  name !== CACHE_NAME;
+              const legacyRootCache = new URL(self.registration.scope).pathname === '/' &&
+                  /^cosplayers-diary-pwa-v\d+$/.test(name);
+              return (name.startsWith(CACHE_PREFIX) || legacyRootCache) && name !== CACHE_NAME;
             })
             .map(function (name) {
               return caches.delete(name);
@@ -93,14 +96,16 @@ self.addEventListener('fetch', function (event) {
           });
       })
       .catch(function () {
-        return caches.match(request).then(function (cached) {
-          if (cached) return cached;
-          if (request.mode === 'navigate') {
-            return caches.match(
-              new URL('index.html', self.registration.scope).toString(),
-            );
-          }
-          throw new Error('オフラインで利用できないリソースです。');
+        return caches.open(CACHE_NAME).then(function (cache) {
+          return cache.match(request).then(function (cached) {
+            if (cached) return cached;
+            if (request.mode === 'navigate') {
+              return cache.match(
+                new URL('index.html', self.registration.scope).toString(),
+              );
+            }
+            throw new Error('オフラインで利用できないリソースです。');
+          });
         });
       }),
   );

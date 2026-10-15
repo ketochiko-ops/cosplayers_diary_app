@@ -50,36 +50,6 @@ class BackupService {
   static const currentVersion = 1;
   final int maxExtractedBytes;
 
-  Uint8List create(
-    Map<String, Uint8List> source, {
-    required DateTime createdAt,
-    int formatVersion = currentVersion,
-  }) {
-    final archive = Archive();
-    final counts = <String, int>{};
-    var imageCount = 0;
-    for (final entry in source.entries) {
-      archive.add(ArchiveFile.bytes(entry.key, entry.value));
-      if (entry.key.startsWith('data/') && entry.key.endsWith('.csv')) {
-        counts[entry.key.substring(5)] = _csvDataRows(entry.value);
-      }
-      if (entry.key.startsWith('images/')) imageCount++;
-    }
-    final manifest = BackupManifest(
-      formatVersion: formatVersion,
-      createdAt: createdAt,
-      dataCounts: counts,
-      imageCount: imageCount,
-    );
-    archive.add(
-      ArchiveFile.string(
-        'manifest.json',
-        const JsonEncoder.withIndent('  ').convert(manifest.toJson()),
-      ),
-    );
-    return ZipEncoder().encodeBytes(archive);
-  }
-
   BackupInspection inspect(Uint8List bytes) {
     final errors = <String>[];
     final files = <String, Uint8List>{};
@@ -134,14 +104,5 @@ class BackupService {
     return normalized != '..' &&
         !normalized.startsWith('../') &&
         normalized == value;
-  }
-
-  int _csvDataRows(Uint8List bytes) {
-    final lines = utf8
-        .decode(bytes, allowMalformed: true)
-        .split(RegExp(r'\r?\n'))
-        .where((line) => line.isNotEmpty)
-        .length;
-    return lines > 0 ? lines - 1 : 0;
   }
 }

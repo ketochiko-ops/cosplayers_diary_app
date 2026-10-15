@@ -13,3 +13,5 @@ ios/Flutter/ephemeral/
 .idea/
 .vscode/
 flutter_*.log
+
+/.vercel/output/

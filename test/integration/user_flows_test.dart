@@ -63,7 +63,7 @@ void main() {
     expect(lenses.ledger.unusedCount(purchase.id), 1);
   });
 
-  test('D: ZIP backup restores masters diary and lens inventory into empty database', () async {
+  test('D: plain JSON backup restores masters diary and lens inventory into empty database', () async {
     final firstDb = await AppDatabase.open(
       path: inMemoryDatabasePath,
       factory: databaseFactoryFfi,
@@ -96,7 +96,7 @@ void main() {
       diary: diaries,
       lenses: lenses,
     );
-    final zip = BackupCoordinator(first).create(DateTime.utc(2026, 1, 2));
+    final json = BackupCoordinator(first).create();
     await firstDb.close();
 
     final secondDb = await AppDatabase.open(
@@ -112,7 +112,7 @@ void main() {
       diary: restoredDiaries,
       lenses: restoredLenses,
     );
-    final result = await BackupCoordinator(second).restore(zip);
+    final result = await BackupCoordinator(second).restore(json);
     expect(result.isValid, isTrue);
     expect(
       (

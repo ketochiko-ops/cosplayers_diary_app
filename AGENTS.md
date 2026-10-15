@@ -12,7 +12,7 @@
 
 ## リポジトリの要点
 
-- Flutter/Dart製の完全オフライン型モバイルアプリです。対象はiOS、iPadOS、Androidです。
+- Flutter/Dart製でオフライン利用を基本とするモバイル/PWAアプリです。任意のGoogleカレンダー連携はWeb/PWAのみで、通常利用には認証不要です。
 - 状態管理は外部パッケージではなく、`ChangeNotifier` ベースの3ストアを `AppShell` が所有します。
 - 現行の永続化の正本は、SQLite `settings` テーブルの `app_state_v1` JSONです。正規化テーブルは作成されますが、通常の読み書きにはまだ使われません。
 - `domain` はFlutter UIやI/Oから独立させます。副作用は `application`、`infrastructure`、`presentation` の適切な境界に置きます。
@@ -24,7 +24,7 @@
 
 - 新しい業務規則は、可能なら `features/<feature>/domain` の純粋なDartコードに置き、先にユニットテストを追加します。
 - ストアを変更したら `notifyListeners()` と `AppStatePersistence` のシリアライズ/復元の両方を確認します。
-- 永続化モデルを変更したら、JSONの後方互換性、CSV列、ZIPバックアップ、SQLiteスキーマの影響を確認します。
+- 永続化モデルを変更したら、JSONの後方互換性、CSV列、JSONプロジェクト/旧ZIP移行、SQLiteスキーマの影響を確認します。
 - 日記とカラコン使用のような複数ストアをまたぐ操作は、片側だけ更新しないでください。必要ならapplication層にコーディネーターを置きます。
 - `DateTime.now()` やファイルI/Oを業務規則へ直接増やさず、既存の `Clock` / `FileStore` 境界を利用または拡張します。
 - UI文言は既存どおり日本語を基本とします。画面幅600px未満/以上の両方を考慮します。

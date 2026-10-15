@@ -2,6 +2,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const outputDirectory = process.argv[2] ?? 'build/web';
+const expectedBaseHref = process.argv[3] ?? '/';
+const index = fs.readFileSync(path.join(outputDirectory, 'index.html'), 'utf8');
+const baseHref = index.match(/<base\s+href="([^"]+)"/i)?.[1];
+if (baseHref !== expectedBaseHref || !baseHref.startsWith('/') || !baseHref.endsWith('/')) {
+  throw new Error(`公開パスが一致しません: expected=${expectedBaseHref}, actual=${baseHref}`);
+}
 const sourceWorker = fs.readFileSync('web/app_service_worker.js', 'utf8');
 const shellBlock = sourceWorker.match(/const APP_SHELL = \[([\s\S]*?)\];/);
 
@@ -38,5 +44,8 @@ if (!bootstrap.includes("canvasKitBaseUrl: 'canvaskit/'")) {
   throw new Error('CanvasKitがローカル配信に固定されていません。');
 }
 
-JSON.parse(fs.readFileSync(path.join(outputDirectory, 'manifest.json'), 'utf8'));
-console.log(`PWA成果物を検証しました（プリキャッシュ ${shellPaths.length}件）。`);
+const manifest = JSON.parse(fs.readFileSync(path.join(outputDirectory, 'manifest.json'), 'utf8'));
+if (manifest.start_url !== './' || manifest.scope !== './' || manifest.id !== './') {
+  throw new Error('PWAの起動先とscopeを配信ディレクトリ相対にしてください。');
+}
+console.log(`PWA成果物を検証しました（base href ${baseHref}、プリキャッシュ ${shellPaths.length}件）。`);

@@ -1,10 +1,5 @@
-import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
 
-import '../../features/contact_lenses/application/lens_store.dart';
-import '../../features/diary/application/diary_store.dart';
-import '../../features/master_data/application/master_data_store.dart';
 import 'app_state_persistence.dart';
 import 'project_storage.dart';
 import 'settings_store.dart';
@@ -27,71 +22,78 @@ class ProjectSyncController extends ChangeNotifier {
   String? _revision;
   String? _name;
   String? _message;
+  int _loadedProjectVersion = 0;
+  bool _browserMode = false;
   bool _paused = false;
   bool _busy = false;
   String? _preferredTarget;
+  Future<void> _io = Future<void>.value();
 
   ProjectTarget? get target => _target;
   String? get name => _name;
   String? get message => _message;
   bool get paused => _paused;
   bool get busy => _busy;
+  bool get browserMode => _browserMode;
+  int get loadedProjectVersion => _loadedProjectVersion;
+  bool get requiresSelection => !_browserMode && (_target == null || _paused);
   String? get preferredTarget => _preferredTarget;
 
   Future<void> loadPreference() async {
     _preferredTarget = await settings.readSetting(preferenceKey);
-    notifyListeners();
+    _browserMode = _preferredTarget == 'browser';
   }
 
   Future<void> tryResumeLocalFile() async {
-    if (_preferredTarget != ProjectTarget.localFile.name ||
-        !storage.supportsLocalFile) {
+    if (_browserMode ||
+        !storage.supportsLocalFile ||
+        _preferredTarget != ProjectTarget.localFile.name) {
       return;
     }
     try {
       final snapshot = await storage.reconnectLocalFile();
-      if (snapshot == null || snapshot.content != persistence.exportJson()) {
-        _message = 'ファイルの内容を確認するため再接続してください';
-        notifyListeners();
+      if (snapshot == null) return;
+      validate(snapshot.content ?? '');
+      if (snapshot.content != persistence.exportJson()) {
+        _requireSelection('前回のファイルと端末に残る内容が異なります。使用する内容を選んでください。');
         return;
       }
       await _activate(ProjectTarget.localFile, snapshot);
-    } catch (_) {
-      _message = 'ローカルファイルへの再接続が必要です';
+    } catch (error) {
+      _requireSelection('前回のプロジェクトファイルを読み込めません。保存先を再指定してください: $error');
+    }
+  }
+
+  // Detach the previous target before changing the platform handle. This also
+  // drains queued cache saves so they cannot overwrite the newly selected file.
+  Future<ProjectSnapshot?> _choose(
+    Future<ProjectSnapshot?> Function() choose,
+  ) async {
+    if (_busy) return null;
+    _busy = true;
+    _target = null;
+    _browserMode = false;
+    notifyListeners();
+    try {
+      await persistence.flush();
+      await _io;
+      return await choose();
+    } catch (error) {
+      _requireSelection('ファイルを指定できませんでした: $error');
+      rethrow;
+    } finally {
+      _busy = false;
       notifyListeners();
     }
   }
 
-  Future<ProjectSnapshot?> openLocalFile() => storage.openLocalFile();
+  Future<ProjectSnapshot?> openLocalFile() => _choose(storage.openLocalFile);
   Future<ProjectSnapshot?> createLocalFile() =>
-      storage.createLocalFile(persistence.exportJson());
-  Future<ProjectSnapshot?> reconnectLocalFile() => storage.reconnectLocalFile();
-  Future<ProjectSnapshot> connectGoogleDrive(String clientId) =>
-      storage.connectGoogleDrive(clientId);
+      _choose(() => storage.createLocalFile(persistence.exportJson()));
+  Future<ProjectSnapshot?> reconnectLocalFile() =>
+      _choose(() => storage.reconnectLocalFile(requestPermission: true));
 
-  void validate(String source) {
-    final decoded = jsonDecode(source);
-    if (decoded is! Map<String, dynamic> ||
-        !const [
-          'genres',
-          'characters',
-          'costumes',
-          'diary',
-          'lensProducts',
-          'lensPurchases',
-          'lensInventories',
-          'lensUsages',
-        ].every((key) => decoded[key] is List)) {
-      throw const FormatException('プロジェクトJSONの形式が正しくありません');
-    }
-    final temporary = AppStatePersistence(
-      store: settings,
-      masters: MasterDataStore(),
-      diary: DiaryStore(),
-      lenses: LensStore(),
-    );
-    temporary.restoreJson(source);
-  }
+  void validate(String source) => persistence.validateJson(source);
 
   Future<void> useProject(
     ProjectTarget target,
@@ -101,12 +103,19 @@ class ProjectSyncController extends ChangeNotifier {
     if (content == null) throw const FormatException('プロジェクトファイルが空です');
     validate(content);
     _busy = true;
+    _target = null;
+    _browserMode = false;
     notifyListeners();
     try {
-      _target = null;
+      await persistence.flush();
+      await _io;
       persistence.restoreJson(content);
+      _loadedProjectVersion++;
       await persistence.save();
       await _activate(target, snapshot);
+    } catch (error) {
+      _requireSelection('プロジェクトを読み込めませんでした: $error');
+      rethrow;
     } finally {
       _busy = false;
       notifyListeners();
@@ -118,16 +127,19 @@ class ProjectSyncController extends ChangeNotifier {
     ProjectSnapshot snapshot,
   ) async {
     _busy = true;
+    _target = null;
+    _browserMode = false;
     notifyListeners();
     try {
+      await persistence.flush();
+      await _io;
       final source = persistence.exportJson();
-      final result =
-          target == ProjectTarget.googleDrive && snapshot.content == null
-          ? await storage.createGoogleDrive(source)
-          : snapshot.content == source
-          ? snapshot
-          : await storage.write(target, source, snapshot.revision);
+      final result = await storage.write(target, source, snapshot.revision);
+      await persistence.save(replaceInvalidCache: true);
       await _activate(target, result);
+    } catch (error) {
+      _requireSelection('プロジェクトを保存できませんでした: $error');
+      rethrow;
     } finally {
       _busy = false;
       notifyListeners();
@@ -135,42 +147,107 @@ class ProjectSyncController extends ChangeNotifier {
   }
 
   Future<void> _activate(ProjectTarget target, ProjectSnapshot snapshot) async {
+    await settings.writeSetting(preferenceKey, target.name);
+    _browserMode = false;
     _target = target;
     _revision = snapshot.revision;
     _name = snapshot.name;
     _paused = false;
     _message = null;
     _preferredTarget = target.name;
-    await settings.writeSetting(preferenceKey, target.name);
     notifyListeners();
   }
 
-  Future<void> _onSaved(String source) async {
-    final target = _target;
-    if (target == null || _paused) return;
+  Future<void> _onSaved(String source) {
+    _io = _io.then((_) async {
+      final target = _target;
+      if (target == null || _paused) return;
+      try {
+        final result = await storage.write(target, source, _revision);
+        _revision = result.revision;
+        _name = result.name;
+        notifyListeners();
+      } catch (error) {
+        _requireSelection(
+          'プロジェクトファイルに保存できません。保存場所を再指定してください。変更内容は端末に保持しています: $error',
+        );
+      }
+    });
+    return _io;
+  }
+
+  // Reads are serialized with writes to avoid treating our own save as a conflict.
+  Future<void> checkFile() {
+    if (_browserMode || requiresSelection || _busy) return Future<void>.value();
+    _io = _io.then((_) async {
+      if (_browserMode || requiresSelection || _busy) return;
+      try {
+        final snapshot = await storage.readLocalFile();
+        if (snapshot.revision != _revision) {
+          throw const FormatException('ファイルが他のアプリや端末で変更されました');
+        }
+      } catch (error) {
+        _requireSelection('プロジェクトファイルを読み込めません。保存場所を再指定してください: $error');
+      }
+    });
+    return _io;
+  }
+
+  void reportCacheError(Object error) {
+    _browserMode = false;
+    _target = null;
+    _requireSelection(
+      '端末内の保存データを読み込めませんでした。JSONの控えを指定するか、ブラウザ保存モードで新しく開始してください。ブラウザ保存で開始した後も、設定からJSONの控えを読み込めます: $error',
+    );
+  }
+
+  void _requireSelection(String message) {
+    _paused = true;
+    _message = message;
+    notifyListeners();
+  }
+
+  Future<void> useBrowserMode() async {
+    _busy = true;
+    _target = null;
+    notifyListeners();
     try {
-      final result = await storage.write(target, source, _revision);
-      _revision = result.revision;
-      _name = result.name;
+      await persistence.flush(replaceInvalidCache: true);
+      await _io;
+      await settings.writeSetting(preferenceKey, 'browser');
+      _browserMode = true;
+      _preferredTarget = 'browser';
+      _paused = false;
       _message = null;
-      notifyListeners();
-    } catch (error) {
-      _paused = true;
-      _message = '自動保存を停止しました: $error';
+      _name = null;
+      _revision = null;
+    } finally {
+      _busy = false;
       notifyListeners();
     }
   }
 
   Future<void> disconnect() async {
-    final target = _target;
-    if (target != null) await storage.disconnect(target);
+    if (_busy) return;
+    _busy = true;
+    _browserMode = false;
     _target = null;
-    _revision = null;
-    _name = null;
-    _message = null;
     _paused = false;
-    _preferredTarget = null;
-    await settings.writeSetting(preferenceKey, '');
     notifyListeners();
+    try {
+      await persistence.flush();
+      await _io;
+      if (storage.supportsLocalFile) {
+        await storage.disconnect(ProjectTarget.localFile);
+      }
+      _revision = null;
+      _name = null;
+      _message = null;
+      _preferredTarget = null;
+      await settings.writeSetting(preferenceKey, '');
+    } finally {
+      _busy = false;
+      notifyListeners();
+    }
   }
 }

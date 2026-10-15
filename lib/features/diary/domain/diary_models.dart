@@ -16,6 +16,7 @@ class DiaryEntry {
     this.characterId,
     this.costumeId,
     this.memo = '',
+    this.calendarTitle = '',
     this.photoId,
     this.lensInventoryId,
     DateTime? createdAt,
@@ -30,6 +31,7 @@ class DiaryEntry {
   final String? characterId;
   final String? costumeId;
   final String memo;
+  final String calendarTitle;
   final String? photoId;
   final String? lensInventoryId;
   final DateTime createdAt;
@@ -43,6 +45,7 @@ class DiaryEntry {
     String? characterId,
     String? costumeId,
     String? memo,
+    String? calendarTitle,
     String? photoId,
     String? lensInventoryId,
     bool clearLens = false,
@@ -55,6 +58,7 @@ class DiaryEntry {
     characterId: characterId ?? this.characterId,
     costumeId: costumeId ?? this.costumeId,
     memo: memo ?? this.memo,
+    calendarTitle: calendarTitle ?? this.calendarTitle,
     photoId: photoId ?? this.photoId,
     lensInventoryId: clearLens ? null : lensInventoryId ?? this.lensInventoryId,
     createdAt: createdAt,

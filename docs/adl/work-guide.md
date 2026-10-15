@@ -29,9 +29,13 @@ Android releaseは `flutter build appbundle --release`、iOS releaseはmacOS/Xco
 
 Web/PWAはローカル確認に `flutter run -d chrome`、Vercel用リリース生成に `flutter build web --release --pwa-strategy=none --base-href /` を使います。独自の `app_service_worker.js` を使うため、Flutter生成Service Workerは無効化します。HTTPS配信先はVercelの `cosplayers-diary-app` プロジェクトです。VercelのGit自動デプロイは無効で、公開はGitHub Actionsが生成する検証済みprebuilt成果物だけを使用します。
 
-Google Drive連携を公開する場合、サイト運営者がGoogle CloudのWeb OAuthクライアントを作成し、GitHub ActionsのRepository variable `GOOGLE_OAUTH_CLIENT_ID` を設定します。ワークフローは `--dart-define` で公開クライアントIDをビルドへ渡します。未設定時はGoogle Drive接続ボタンが無効です。利用者個別のOAuthクライアントIDを公開サイトで入力させる方式はGoogleのドメイン所有要件に合いません。
+PWAは初回に指定ファイル（対応ブラウザ）かブラウザ保存（Safari対応）を選びます。設定から切替可能です。Google Drive連携と `GOOGLE_OAUTH_CLIENT_ID` ビルド設定は削除しました。JS境界のテストは `node tool/project_storage_test.mjs`、起動/再指定/モード切替は `test/widget/project_setup_test.dart`、障害・競合は `project_sync_controller_test.dart` で確認します。
+
+任意のGoogleカレンダー連携は別の公開クライアントID `GOOGLE_CALENDAR_CLIENT_ID` を使用します。OAuthの運営者設定と利用手順は [`../google-calendar.md`](../google-calendar.md)。`flutter test test/unit/calendar_sync test/widget/calendar_sync_card_test.dart` と `node tool/calendar_sync_test.mjs` で同期規則・回数制限・UI・GIS/API境界を検証します。実Googleアカウント、Safariでの認証、Gemini検索はOAuth設定後に別途確認が必要です。
 
 ビルド後に `node tool/verify_pwa.mjs build/web` を実行すると、manifestのJSON、独自Service Worker登録、ローカルCanvasKit設定、プリキャッシュ対象ファイルの存在を検証できます。続けて `node tool/prepare_vercel_output.mjs build/web` を実行すると、Vercel CLIの `vercel deploy --prebuilt --prod --skip-domain` でステージできる成果物になります。`.github/workflows/deploy-pwa.yml` も同じ検証・変換を行い、Deployment Protectionが有効なステージURLを認証付き `vercel curl` で検証してから、同じprebuilt成果物を本番へ公開します。
+
+`pre-develop` は `deploy-pages.yml` からPages検証版へ配信します。手動の再現は `flutter build web --release --pwa-strategy=none --base-href /cosplayers_diary_app/` と `node tool/verify_pwa.mjs build/web /cosplayers_diary_app/`。ルート配信とは別のビルドです。`node tool/service_worker_test.mjs` はサブパスの取得・別サイトのキャッシュ保持・オフラインフォールバックを検証します。`project_storage_test.mjs` は公開パス別handle DBも検証します。初回のPages Source/Environment設定と利用枠は [`../pwa-preview.md`](../pwa-preview.md) を参照してください。
 
 ## 変更箇所マップ
 
@@ -41,13 +45,14 @@ Google Drive連携を公開する場合、サイト運営者がGoogle CloudのWe
 | マスター項目/候補 | `master_models.dart`, `master_service.dart` | store、フォーム、JSON、CSV、過去参照 |
 | 日記の項目/検証 | `diary_models.dart`, `diary_service.dart` | DiaryStore、フォーム/一覧、JSON、CSV、統計 |
 | カラコン在庫/使用 | `lens_service.dart` | 日記との整合性、LensStore、JSON、CSV、統計 |
-| 写真保存 | `photo_service.dart`, `local_file_store.dart` | UI composition、メタデータ永続化、ZIP画像 |
+| 写真保存 | `photo_service.dart`, `local_file_store.dart` | UI composition、メタデータ永続化、JSONの画像参照 |
 | SQLite | `schema.dart`, `app_database.dart` | version追加、DB結合テスト、JSON正本との関係 |
 | 自動保存/復元 | `app_state_persistence.dart`, `settings_store.dart` | SQLite/localStorage、全モデルの往復、古いJSON、dispose時保存 |
-| PWAプロジェクト保存 | `project_sync_controller.dart`, `project_storage*.dart`, `web/project_storage.js` | 外部更新競合、OAuth再接続、オフライン、ローカルキャッシュ |
-| PWA/配信 | `web/`, `.github/workflows/deploy-pwa.yml` | manifest、アイコン、base href、HTTPS、オフライン再起動 |
+| PWAプロジェクト保存 | `project_sync_controller.dart`, `project_storage*.dart`, `web/project_storage.js` | 外部更新競合、ファイル権限再許可、オフライン、ローカルキャッシュ |
+| Googleカレンダー連携 | `features/calendar_sync/`, `web/calendar_sync.js` | 3状態比較、ETag、削除と在庫、日次10回、認証/表示切替、OAuth設定文書 |
+| PWA/配信 | `web/`, `.github/workflows/deploy-pwa.yml`, `deploy-pages.yml` | 本番/検証ブランチ、manifest、base href、保存領域とキャッシュのscope、オフライン再起動 |
 | CSV | `csv_service.dart`, `backup_coordinator.dart` | README列定義、samples、参照検証、BOM |
-| ZIP | `backup_service.dart`, `backup_coordinator.dart` | 検証前非破壊、サイズ/パス/形式、設定UI |
+| JSON/旧ZIP読取 | `backup_service.dart`, `backup_coordinator.dart` | 検証前非破壊、サイズ/パス/形式、設定UI |
 | 統計 | `statistics_service.dart`, `dashboard_page.dart` | 回数対日数、年filter、空状態、ID→名称表示 |
 | バックアップ通知 | `backup_reminder.dart`, `settings_page.dart` | 時計境界、未来日時、保存キャンセル |
 
@@ -56,7 +61,8 @@ Google Drive連携を公開する場合、サイト運営者がGoogle CloudのWe
 ```text
 test/
 ├── unit/
-│   ├── backup/          # manifest、version、ZIP Slip、サイズ上限
+│   ├── backup/          # JSON往復・非破壊検証・旧ZIP読取
+│   ├── calendar_sync/   # 変換・競合・削除・日次上限・端末間同期
 │   ├── contact_lenses/  # 期限、在庫、ワンデー、編集/削除整合性
 │   ├── core/            # Clock、migration定義
 │   ├── csv/             # BOM、引用、検証、差分preview
@@ -76,7 +82,7 @@ test/
 
 - A: マスター連鎖からコスプレ日記保存
 - B/C: ワンデー使用と解除による在庫復元
-- D: ZIP経由で空DB側のストアへ状態復元
+- D: JSON経由で空DB側のストアへ状態復元
 - E: 同日のコスプレ/撮影を独立集計
 
 新しい業務規則は最小のunit testへ追加し、複数featureの接続はintegration test、画面の表示/操作はwidget testで補います。
@@ -124,12 +130,12 @@ test/
 ### データ整合性・堅牢性
 
 - `DiaryStore.delete()` とカラコン使用解除が連動していない。
-- `restoreJson()` は構造不正や未知enumを回復可能な検証エラーにしない。
-- バックアップ検査はmanifestのCSV行数と実内容を照合しない。
+- `restoreJson()` は全体検証後に復元する。JSON/旧ZIPの読み込み失敗は設定画面へ通知する。
+- 旧ZIP移行の検査はmanifestのCSV行数と実内容を照合しない。
 - バックアップ作成は画像ファイルを収集せず、写真メタデータも状態に含まない。
 - ID生成は各クラス内の `DateTime.now().microsecondsSinceEpoch + sequence` で、共通ID生成器や注入可能なClockを使っていない。
 - `Clock` 抽象は存在するが、多くのUI/store/domain modelが `DateTime.now()` を直接使用する。
-- SQLite/localStorage自体の自動保存例外をユーザーへ通知・再試行する仕組みがない。PWA外部保存の例外は設定画面に表示し、外部保存を停止する。
+- SQLite/localStorage自体の自動保存例外をユーザーへ通知・再試行する仕組みがない。PWA指定ファイルの例外は必須の再指定画面を表示し、外部保存と編集を停止する。
 
 ### 保守性
 
@@ -143,7 +149,7 @@ test/
 - 要求されたユーザーフローが画面から完結するか。
 - domainの不変条件を壊していないか。
 - store更新後に再描画と自動保存が起きるか。
-- 再起動、ZIP作成/復元、古いJSONへの影響を確認したか。
+- 再起動、JSON保存/読み込み、旧ZIP移行、古いJSONへの影響を確認したか。
 - スマホ幅とタブレット幅でレイアウトを確認したか。
 - 対象test、全 `flutter test`、`flutter analyze` を実行したか。
 - 実行できない検証は、環境理由とともに明示したか。

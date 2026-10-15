@@ -35,6 +35,10 @@ class _DiaryFormState extends State<DiaryForm> {
     text: widget.entry?.memo ?? '',
   );
 
+  late final TextEditingController _calendarTitle = TextEditingController(
+    text: widget.entry?.calendarTitle ?? '',
+  );
+
   @override
   void initState() {
     super.initState();
@@ -46,6 +50,7 @@ class _DiaryFormState extends State<DiaryForm> {
   @override
   void dispose() {
     _memo.dispose();
+    _calendarTitle.dispose();
     super.dispose();
   }
 
@@ -128,6 +133,14 @@ class _DiaryFormState extends State<DiaryForm> {
           ],
           const SizedBox(height: 12),
           TextField(
+            controller: _calendarTitle,
+            decoration: const InputDecoration(
+              labelText: '予定名（任意）',
+              helperText: '未入力なら活動種別・作品・キャラクターから自動作成します',
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
             controller: _memo,
             maxLines: 4,
             decoration: const InputDecoration(labelText: 'メモ'),
@@ -176,6 +189,7 @@ class _DiaryFormState extends State<DiaryForm> {
       characterId: _characterId,
       costumeId: _costumeId,
       memo: _memo.text.trim(),
+      calendarTitle: _calendarTitle.text.trim(),
       photoId: current?.photoId,
       lensInventoryId: current?.lensInventoryId,
       createdAt: current?.createdAt,

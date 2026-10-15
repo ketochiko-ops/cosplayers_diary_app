@@ -1,6 +1,6 @@
 # コスプレ日記
 
-iOS・iPadOS・Android・PWA向けの、完全オフライン型コスプレ活動管理アプリです。カレンダー、日記、ジャンル・キャラクター・衣装、カラコン購入/実物/使用履歴、写真、統計、CSV、ZIPバックアップを一つのFlutterプロジェクトで扱います。通常利用にネット接続やアカウントは不要です。
+iOS・iPadOS・Android・PWA向けの、オフラインで使えるコスプレ活動管理アプリです。カレンダー、日記、ジャンル・キャラクター・衣装、カラコン購入/実物/使用履歴、写真、統計、CSV、JSONプロジェクト保存を一つのFlutterプロジェクトで扱います。通常利用にネット接続やアカウントは不要です。Web/PWA版では任意でGoogleカレンダーと日記を同期できます。
 
 ## 主な機能
 
@@ -9,18 +9,19 @@ iOS・iPadOS・Android・PWA向けの、完全オフライン型コスプレ活�
 - カラコン製品、購入別在庫、1組単位の開封/使用履歴、ワンデー再使用防止
 - 年/全期間の活動回数・活動日数・同日重複・月別・上位ランキング
 - オリジナルまたは長辺2,048pxの写真保存サービス
-- UTF-8/BOM対応CSVと、検証付きZIPバックアップ/復元
+- UTF-8/BOM対応CSVサービスと、検証付きJSON保存/読み込み（旧ZIPの移行読み込み対応）
 - 最終バックアップから30日経過した場合の端末内リマインド
 - 600px未満は下部ナビゲーション、600px以上はNavigationRail
 - iPhone/iPadのホーム画面追加と、インストール後のオフライン起動に対応するPWA
-- PWAではプロジェクトJSONのローカルファイル保存（対応ブラウザ）または任意のGoogle Drive連携
+- PWA初回に保存モードを選択：指定JSONファイルへの自動保存（対応ブラウザ）またはブラウザ保存（Safari対応）
+- 任意のGoogleカレンダー連携：専用カレンダー、日ごとの初回編集を自動同期、以降は手動、端末・ブラウザごとに合計10回/日
 
 ## 技術と構成
 
 - Flutter 3.47 / Dart 3.13
 - ネイティブ版はSQLite (`sqflite`)、PWA版はブラウザのlocalStorageへ同じJSON状態を永続化
 - `image_picker` / `image` / `path_provider`
-- `archive` によるZIP、独立したCSVパーサー/検証器
+- `archive` による旧ZIPの読み込み、独立したCSVパーサー/検証器
 - UI (`presentation`)、状態/ユースケース (`application`)、業務規則 (`domain`)、I/O (`infrastructure`) を分離
 - 現在日時は `Clock`、ファイルは `FileStore` で抽象化
 
@@ -35,7 +36,8 @@ lib/
     ├── master_data/     # ジャンル・キャラクター・衣装
     ├── contact_lenses/  # 製品・購入・実物・使用台帳
     ├── photos/          # 安全な画像保存・縮小
-    ├── backup/          # CSV・ZIP
+    ├── backup/          # CSV・JSON・旧ZIP読み込み
+    ├── calendar_sync/   # 任意のGoogleカレンダー双方向同期
     ├── dashboard/       # 統計
     └── settings/        # 設定・バックアップ案内
 test/
@@ -97,6 +99,8 @@ flutter build ipa --release
 
 本番公開URL: <https://cosplayers-diary-app.vercel.app>
 
+検証用URL（`pre-develop`）: <https://ketochiko-ops.github.io/cosplayers_diary_app/>
+
 ```sh
 flutter run -d chrome
 flutter build web --release --pwa-strategy=none --base-href /
@@ -110,26 +114,40 @@ node tool/prepare_vercel_output.mjs build/web
 npx --yes --package vercel@60.1.3 vercel deploy --prebuilt --prod --skip-domain
 ```
 
-Web版のアプリ状態は同じ `app_state_v1` JSONをブラウザのローカルストレージへ保存します。任意のプロジェクト保存を設定すると、そのJSONを更新のたびに選択した保存先へも書き込みます。ネイティブ版のSQLiteをWebから直接開くことはできないため、ネイティブ版との移行には設定画面のZIPバックアップ作成・復元を使用してください。Safariの「履歴とWebサイトデータを消去」などでブラウザ保存が削除されるため、定期バックアップを推奨します。
+Web版は初回に保存モードを必ず選びます。指定ファイルモードでは同じ `app_state_v1` JSONをブラウザ内にも保持し、変更時に指定JSONファイルへ書き込みます。Safari対応モードではブラウザ内へ自動保存します。ネイティブ版との移行は設定画面のJSON保存・読み込みで行います。ブラウザデータ削除に備え、定期的にJSONの控えを保存してください。
 
 Vercelへの公開ワークフローは [`.github/workflows/deploy-pwa.yml`](.github/workflows/deploy-pwa.yml) にあります。GitHub ActionsのRepository secretへ `VERCEL_TOKEN` を登録すると、`develop` へのpushまたは手動実行で解析・テスト・PWA検証を行い、Production用のprebuiltデプロイを認証付き `vercel curl` でHTTP検証してから、同じprebuilt成果物を本番ドメインへ公開します。Team IDとProject IDは公開情報のためワークフローに固定しています。VercelのGit自動デプロイは [`vercel.json`](vercel.json) で無効化し、Flutterをビルドしていない空のデプロイが本番を上書きしないようにしています。Vercelプロジェクト名は `cosplayers-diary-app` です。
 
 iPhoneではSafariで公開URLを開き、共有メニューから「ホーム画面に追加」を選択します。初回表示と更新取得にはネット接続が必要ですが、その後はキャッシュ済みのアプリをオフラインで起動できます。
 
+### 本番公開前の確認（GitHub Pages）
+
+`pre-develop` へのpushは [Pages用ワークフロー](.github/workflows/deploy-pages.yml) で検証版だけを公開します。確認後に `develop` へマージすると従来どおりVercelへ本番公開します。手動実行も各ブランチに限定し、検証ブランチからVercelへ公開されるのを防ぎます。
+
+Pagesの初回設定はSourceを「GitHub Actions」、`github-pages` 環境の許可ブランチを `pre-develop` にします。公開リポジトリの標準ランナーの実行時間は無料です。転送量やartifact保存枠は別に制限があるため、配信用artifactは成功後に削除し、残った場合も1日で期限切れにします。設定手順・利用枠・検証データの扱いは [`docs/pwa-preview.md`](docs/pwa-preview.md) を参照してください。
+
 ### PWAのプロジェクト保存と端末間の利用
 
-設定画面の「プロジェクト保存」で次のいずれかを選びます。連携しない場合もブラウザ内への自動保存は続きます。
+初回起動時（保存モード未指定時）は、保存方法の選択が完了するまで編集できません。設定画面の「保存モード・プロジェクトファイルを変更」でいつでも切り替えられます。切り替えでも現在のデータは保持します。
 
-| 保存先 | 使い方 | 制約 |
+| モード | 初回の操作 | 保存方法 |
 |---|---|---|
-| ローカルファイル | 「新しいプロジェクトを保存」で同期フォルダ内の場所を選ぶか、既存の `.json` を開く | ファイルへの継続書き込みが可能なChrome/Edgeなどで利用可能。iPhone/iPadのSafari PWAでは使えません |
-| Google Drive | サイト運営者によるOAuth設定後、各利用者が「Google Driveに接続」を選ぶ | 各利用者のDrive上に `CosplayDiary/CosplayDiary.project.json` を作成します。接続時と保存時にネット接続が必要です |
+| 指定ファイル（Chrome/Edge等） | 任意の場所に `CosplayDiary.project.json` を作成するか、既存JSONを指定 | 変更時に自動上書き。ファイルhandleはIndexedDBに保持 |
+| ブラウザ保存（Safari対応） | 「ブラウザ保存モードで開始」を選択 | このブラウザ内へ自動保存。外部への控えは設定からJSONを保存 |
 
-サイト運営者は[Google Cloud Console](https://console.cloud.google.com/) でプロジェクトを作成し、Google Drive APIを有効化して、OAuth同意画面に `https://www.googleapis.com/auth/drive.file` を登録します。次に「ウェブアプリケーション」型のOAuthクライアントを作り、**承認済みJavaScript生成元**へ `https://cosplayers-diary-app.vercel.app` を登録します。GitHub ActionsのRepository variable `GOOGLE_OAUTH_CLIENT_ID` に発行されたクライアントID（`...apps.googleusercontent.com`）を設定して再デプロイします。設定前はアプリのGoogle Drive接続ボタンが無効です。クライアントシークレットは設定しません。OAuthアプリの公開設定、サイトのドメイン確認、プライバシーポリシー等は[Googleの要件](https://developers.google.com/identity/protocols/oauth2/policies)に従ってサイト運営者が設定します。利用者が各自でこの公開サイト向けのOAuthクライアントIDを作る運用は、ドメイン所有の要件に合いません。
+指定ファイルの作成・選択をキャンセルしても編集は開始しません。再起動時は、権限が残り内容が端末キャッシュと一致するファイルのみ自動再接続します。権限の再許可が必要な場合や内容が異なる場合は選択画面を表示します。端末とファイルのどちらを使用するか、検証後に明示的に選びます。
 
-初回接続時に端末と保存先の内容が異なる場合は、どちらの内容を採用するか確認します。接続中は更新ごとに自動保存します。ファイルが別の端末で変更された場合や認証・通信が失敗した場合は外部への自動保存を停止し、端末のブラウザ内には変更を残します。再接続して使用する内容を選んでください。Googleのアクセストークンは再起動をまたいで保存しないため、アプリを開き直した後は再接続が必要です。Google Driveとローカルファイルを同時に自動保存する設定はありません。
+保存失敗時は直ちに必須の再指定画面を表示し、外部保存と編集を止めます。変更内容は端末に保持します。読み込み・権限喪失・外部変更は、5秒間隔とアプリ復帰時の確認でも検出します。検出後は保存先の再作成・再選択、またはSafari対応モードへの変更が必要です。保存先の再作成には端末に保持している変更内容を使用します。
 
-プロジェクトJSONと現行ZIPバックアップには写真の画像データは含まれません。ネイティブアプリではこのプロジェクト連携は未対応で、従来どおりSQLiteとZIPバックアップを使用します。Google Drive連携はログイン中のPWAで動作し、アプリを閉じている間に自動同期しません。
+Safariでは任意の外部ファイルへの継続上書きはできません。ブラウザ保存モードのJSON保存は手動のダウンロードで、自動外部同期ではありません。Google Drive連携は削除しました。プロジェクトJSONには画像データは含みません。ネイティブ版は引き続きSQLiteで自動保存し、JSONでデータ交換します。
+
+### 任意のGoogleカレンダー連携（Web/PWA）
+
+設定から本人のGoogleアカウントへ接続すると、専用の「コスプレ日記」カレンダーで日記を双方向に同期します。新規作成時は非表示で、Googleカレンダーの一覧やアプリ設定で表示を切り替えられます。作品・キャラクター・衣装・メモを読みやすい予定として保存し、Geminiで参照するための質問例も用意しています。写真やカラコン在庫は同期しません。
+
+接続中はその日最初の日記変更を自動同期し、以降は手動です（自動同期は無効化可能）。接続時の初回同期・失敗を含め、端末・ブラウザごとに合計10回/日です。再読み込みやアカウント切替でも回数を保持します。連携しない場合や上限到達時もローカル保存を続けられます。起動し直した場合は再接続が必要で、バックグラウンド同期はありません。
+
+利用前に運営者のOAuth設定が必要です。GitHub ActionsのRepository **variable** `GOOGLE_CALENDAR_CLIENT_ID` またはビルド時の `--dart-define=GOOGLE_CALENDAR_CLIENT_ID=...` で公開クライアントIDを指定します。設定手順、同期対象、競合時の操作、Geminiの条件、料金・割当の注意は [`docs/google-calendar.md`](docs/google-calendar.md) を参照してください。実GoogleアカウントとGeminiでの接続確認は設定後に行います。
 
 ## CSV
 
@@ -150,28 +168,11 @@ iPhoneではSafariで公開URLを開き、共有メニューから「ホーム�
 
 `wear_type` は `oneDay` / `twoWeeks` / `monthly` / `other`、`activity_type` は `cosplay` / `photographer` / `other` です。サンプルは [`samples/csv`](samples/csv) にあります。取り込み前に必須値、重複ID、参照ID、日付、整数を検証し、追加・上書き・全置換の差分件数を計算できます。
 
-## ZIPバックアップ
+## JSONファイルの控え・読み込み
 
-設定画面の「ZIPバックアップを作成」から保存先を選びます。復元は「ZIPから復元」でファイルと置換確認を行います。
+設定の「JSONファイルの控えを保存」で、圧縮しない `CosplayDiary_YYYYMMDD.project.json` を保存します。「プロジェクトJSONを読み込む」で形式を検証し、確認後に現在の内容を置き換えます。JSONは自動保存のプロジェクトファイルと同じ形式です。ブラウザではダウンロード開始までを通知し、実際の保存結果は保存先で確認してください。指定ファイルモードでは、読み込んだ内容が現在の自動保存先にも反映されます。
 
-```text
-CosplayDiary_Backup_YYYYMMDD.zip
-├── manifest.json
-└── data/
-    ├── app_state.json
-    ├── genres.csv
-    ├── characters.csv
-    ├── costumes.csv
-    ├── character_lenses.csv
-    ├── contact_lenses.csv
-    ├── lens_purchases.csv
-    ├── lens_inventory.csv
-    ├── lens_usage.csv
-    ├── diary.csv
-    └── photos.csv
-```
-
-写真登録済みの場合は `images/<photo-uuid>.<ext>` を追加する設計です。復元前にCRC、形式バージョン、相対パス（ZIP Slip）、展開後サイズ、画像件数を検査します。検証失敗時は現在の保存状態を変更しません。
+新しいZIPは作成しません。以前のZIPは移行用に読み込みだけ対応し、CRC・形式バージョン・パス・サイズ・画像件数を検査後、`data/app_state.json` を使用します。JSONの構造と全レコードの型を一時ストアで検証するため、検証失敗時に既存状態を部分変更しません。現在の保存対象に写真の画像データは含まれません。
 
 ## テスト
 
@@ -186,7 +187,7 @@ flutter analyze
 
 - Windowsのこの検証環境にはAndroid SDK/エミュレーターとXcodeがないため、実機E2Eは未実行です。統合シナリオはFlutterテスト上で実行しています。
 - 写真保存・縮小・差し替えのサービス層は完成していますが、日記フォームの写真ピッカー/拡大ビューへの最終配線は未完です。
-- CSVの解析・検証・差分計画とZIP内CSV出力は完成していますが、単独CSVを選ぶ一括インポート画面は未完です。ZIP復元は利用できます。
+- CSVの解析・検証・差分計画は完成していますが、単独CSVの一括インポート画面は未完です。データ移行にはJSONを使います。
 - 日記フォームからカラコン実物を選ぶUIの最終配線は未完です。製品/購入管理と使用台帳の整合性ロジックは実装・テスト済みです。
 - ネイティブ版では正規化SQLiteテーブルとマイグレーションを作成しますが、現バージョンの通常保存はトランザクション更新しやすいJSONスナップショットを `settings` に保持します。
-- PWAのデータはブラウザと公開オリジン（スキーム・ホスト・ポート）の組み合わせごとに分離されます。公開URLを変更した場合は自動移行されないため、変更前にZIPバックアップを作成してください。
+- PWAのデータはブラウザと公開オリジン（スキーム・ホスト・ポート）の組み合わせごとに分離されます。公開URLを変更した場合は自動移行されないため、変更前にJSONファイルの控えを保存してください。

@@ -20,6 +20,7 @@ env:
 
 jobs:
   deploy:
+    if: github.ref == 'refs/heads/develop'
     name: Verify and deploy
     runs-on: ubuntu-latest
     environment:
@@ -43,10 +44,13 @@ jobs:
           --release
           --pwa-strategy=none
           --base-href /
-          --dart-define=GOOGLE_OAUTH_CLIENT_ID="$GOOGLE_OAUTH_CLIENT_ID"
+          --dart-define=GOOGLE_CALENDAR_CLIENT_ID="$GOOGLE_CALENDAR_CLIENT_ID"
         env:
-          GOOGLE_OAUTH_CLIENT_ID: ${{ vars.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_CALENDAR_CLIENT_ID: ${{ vars.GOOGLE_CALENDAR_CLIENT_ID }}
       - run: node --check web/app_service_worker.js
+      - run: node tool/calendar_sync_test.mjs
+      - run: node tool/project_storage_test.mjs
+      - run: node tool/service_worker_test.mjs
       - run: node tool/verify_pwa.mjs build/web
       - run: node tool/prepare_vercel_output.mjs build/web
       - name: Stage Vercel Production deployment

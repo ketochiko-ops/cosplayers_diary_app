@@ -4,80 +4,127 @@ import test from 'node:test';
 import vm from 'node:vm';
 
 const source = fs.readFileSync('web/project_storage.js', 'utf8');
-const scope = 'https://www.googleapis.com/auth/drive.file';
-
-function createStorage(fetch) {
-  const oauth2 = {
-    initTokenClient: (config) => ({
-      requestAccessToken: () => config.callback({
-        access_token: 'test-token',
-        scope,
-      }),
-    }),
-    hasGrantedAllScopes: () => true,
-    revoke: () => {},
+function environment(baseURI = 'https://app.example/') {
+  const state = { content: '{}', permission: 'granted', missing: false, cancel: false, requests: 0, writes: 0, stored: null, abortTransaction: false };
+  const handle = {
+    name: 'project.json',
+    queryPermission: async () => state.permission,
+    requestPermission: async () => { state.requests++; return state.permission; },
+    getFile: async () => {
+      if (state.missing) throw new Error('missing file');
+      return { text: async () => state.content };
+    },
+    createWritable: async () => {
+      if (state.missing) throw new Error('missing file');
+      let pending;
+      return { write: async (content) => { pending = content; }, close: async () => { state.content = pending; state.writes++; } };
+    },
   };
-  const window = { google: { accounts: { oauth2 } } };
-  vm.runInNewContext(source, {
-    window,
-    google: window.google,
-    fetch,
-    Headers,
-    Blob,
-    URLSearchParams,
-    indexedDB: {},
-  });
-  return window.cosplayProjectStorage;
+  const databases = [];
+  const indexedDB = {
+    open: (name) => {
+      databases.push(name);
+      const request = {};
+      request.result = {
+        close() {},
+        transaction() {
+          const transaction = { objectStore() {
+            function operation(result, mutate = () => {}) {
+              const request = {};
+              queueMicrotask(() => {
+                request.result = result;
+                request.onsuccess?.();
+                if (state.abortTransaction) {
+                  transaction.error = new Error('transaction aborted');
+                  transaction.onabort?.();
+                } else {
+                  mutate();
+                  transaction.oncomplete?.();
+                }
+              });
+              return request;
+            }
+            return { get: () => operation(state.stored), put: (value) => operation(undefined, () => { state.stored = value; }), delete: () => operation(undefined, () => { state.stored = null; }) };
+          } };
+          return transaction;
+        },
+      };
+      queueMicrotask(() => request.onsuccess());
+      return request;
+    },
+  };
+  function picker() {
+    if (state.cancel) throw Object.assign(new Error('cancel'), { name: 'AbortError' });
+    return handle;
+  }
+  const window = { showSaveFilePicker: async () => picker(), showOpenFilePicker: async () => [picker()] };
+  vm.runInNewContext(source, { window, indexedDB, document: { baseURI }, URL });
+  return { state, databases, storage: window.cosplayProjectStorage };
 }
 
-function response(body, status = 200) {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    json: async () => body,
-    text: async () => typeof body === 'string' ? body : JSON.stringify(body),
-  };
-}
-
-test('Google Drive connection reads the app project', async () => {
-  const calls = [];
-  const storage = createStorage(async (url, options) => {
-    calls.push({ url, options });
-    if (url.includes('?alt=media')) return response('{"diary":[]}');
-    if (url.includes('q=')) {
-      const query = new URL(url).searchParams.get('q');
-      return response({ files: query.includes('mimeType')
-        ? [{ id: 'folder-1', name: 'CosplayDiary' }]
-        : [{ id: 'file-1', name: 'CosplayDiary.project.json', version: '7' }],
-      });
-    }
-    throw new Error(`Unexpected request: ${url}`);
-  });
-
-  const project = JSON.parse(await storage.connectGoogleDrive('client-id'));
-
-  assert.equal(project.content, '{"diary":[]}');
-  assert.equal(project.revision, '7');
-  assert.ok(calls.every((call) => call.options.headers.get('Authorization') === 'Bearer test-token'));
+test('creates uncompressed JSON and saves repeated changes to the chosen file', async () => {
+  const { state, storage } = environment();
+  const created = JSON.parse(await storage.createLocalFile('{"diary":[]}'));
+  assert.equal(created.content, state.content);
+  assert.equal(state.stored.name, 'project.json');
+  await storage.writeLocalFile('{"diary":[1]}', created.revision);
+  await storage.writeLocalFile('{"diary":[1,2]}', '{"diary":[1]}');
+  assert.equal(state.content, '{"diary":[1,2]}');
+  assert.equal(state.writes, 3);
 });
 
-test('Google Drive refuses to overwrite a newer version', async () => {
-  let patched = false;
-  const storage = createStorage(async (url, options) => {
-    if (url.includes('q=')) {
-      const query = new URL(url).searchParams.get('q');
-      return response({ files: query.includes('mimeType')
-        ? [{ id: 'folder-1' }]
-        : [{ id: 'file-1', name: 'project.json', version: '7' }],
-      });
-    }
-    if (url.includes('?alt=media')) return response('{}');
-    if (url.includes('fields=id,name,version')) return response({ id: 'file-1', version: '8' });
-    if (options.method === 'PATCH') patched = true;
-    return response({});
-  });
+test('startup does not request permission without a user action', async () => {
+  const { state, storage } = environment();
+  await storage.createLocalFile('{}');
+  state.permission = 'prompt';
+  await assert.rejects(storage.reconnectLocalFile(), /再指定/);
+  assert.equal(state.requests, 0);
+  state.permission = 'granted';
+  assert.equal(JSON.parse(await storage.reconnectLocalFile(true)).content, '{}');
+});
 
-  await storage.connectGoogleDrive('client-id');
-  await assert.rejects(storage.writeGoogleDrive('{"new":true}', '7'), /別の端末/);
-  assert.equal(patched, false);
+test('external changes and deleted files cannot be silently overwritten', async () => {
+  const { state, storage } = environment();
+  await storage.createLocalFile('{}');
+  state.content = 'external';
+  await assert.rejects(storage.writeLocalFile('new', '{}'), /変更/);
+  assert.equal(state.writes, 1);
+  state.missing = true;
+  await assert.rejects(storage.readLocalFile(), /missing/);
+  await assert.rejects(storage.writeLocalFile('new', 'external'), /missing/);
+});
+
+test('picker cancellation is distinct from a file error', async () => {
+  const { state, storage } = environment();
+  state.cancel = true;
+  assert.equal(await storage.createLocalFile('{}'), null);
+  assert.equal(await storage.openLocalFile(), null);
+  state.cancel = false;
+  state.missing = true;
+  await assert.rejects(storage.openLocalFile(), /missing/);
+});
+
+test('failed IndexedDB commit is not reported as a connected project', async () => {
+  const { state, storage } = environment();
+  state.abortTransaction = true;
+  await assert.rejects(storage.createLocalFile('{}'), /transaction aborted/);
+});
+
+
+test('permission loss is detected even before the next edit', async () => {
+  const { state, storage } = environment();
+  await storage.createLocalFile('{}');
+  state.permission = 'denied';
+  await assert.rejects(storage.readLocalFile(), /権限/);
+  assert.equal(state.requests, 0);
+});
+
+test('file handles are isolated by Pages project while production keeps its database', async () => {
+  const production = environment();
+  const preview = environment('https://user.github.io/cosplayers_diary_app/');
+  const sibling = environment('https://user.github.io/another-project/');
+  for (const env of [production, preview, sibling]) await env.storage.createLocalFile('{}');
+  assert.equal(production.databases[0], 'cosplay-diary-project');
+  assert.equal(preview.databases[0], 'cosplay-diary-project:/cosplayers_diary_app/');
+  assert.notEqual(preview.databases[0], sibling.databases[0]);
 });

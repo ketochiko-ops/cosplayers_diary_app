@@ -22,14 +22,25 @@ class AppStatePersistence {
   final DiaryStore diary;
   final LensStore lenses;
   Future<void> Function(String source)? onSaved;
+  final _savedListeners = <Future<void> Function(String)>[];
+  void addSavedListener(Future<void> Function(String) listener) =>
+      _savedListeners.add(listener);
+  void removeSavedListener(Future<void> Function(String) listener) =>
+      _savedListeners.remove(listener);
   Timer? _timer;
   bool _attached = false;
+  bool _cacheReadable = true;
   Future<void> _pendingSave = Future<void>.value();
 
   Future<void> load() async {
     final source = await store.readSetting(stateKey);
     if (source == null || source.isEmpty) return;
-    restoreJson(source);
+    try {
+      restoreJson(source);
+    } catch (_) {
+      _cacheReadable = false;
+      rethrow;
+    }
   }
 
   void attach() {
@@ -47,11 +58,16 @@ class AppStatePersistence {
     });
   }
 
-  Future<void> save() {
+  Future<void> save({bool replaceInvalidCache = false}) {
+    if (!_cacheReadable && !replaceInvalidCache) return _pendingSave;
     final source = exportJson();
     final write = _pendingSave.catchError((Object _) {}).then((_) async {
       await store.writeSetting(stateKey, source);
+      _cacheReadable = true;
       await onSaved?.call(source);
+      for (final listener in List.of(_savedListeners)) {
+        await listener(source);
+      }
     });
     _pendingSave = write;
     return write;
@@ -95,6 +111,7 @@ class AppStatePersistence {
           'characterId': e.characterId,
           'costumeId': e.costumeId,
           'memo': e.memo,
+          'calendarTitle': e.calendarTitle,
           'photoId': e.photoId,
           'lensInventoryId': e.lensInventoryId,
           'createdAt': e.createdAt.toIso8601String(),
@@ -144,7 +161,48 @@ class AppStatePersistence {
     ],
   });
 
+  Future<void> flush({bool replaceInvalidCache = false}) {
+    _timer?.cancel();
+    return save(replaceInvalidCache: replaceInvalidCache);
+  }
+
+  void validateJson(String source) {
+    final decoded = jsonDecode(source);
+    if (decoded is! Map<String, dynamic> ||
+        !const [
+          'genres',
+          'characters',
+          'costumes',
+          'diary',
+          'lensProducts',
+          'lensPurchases',
+          'lensInventories',
+          'lensUsages',
+        ].every((key) => decoded[key] is List)) {
+      throw const FormatException('プロジェクトJSONの形式が正しくありません');
+    }
+    final temporary = AppStatePersistence(
+      store: store,
+      masters: MasterDataStore(),
+      diary: DiaryStore(),
+      lenses: LensStore(),
+    );
+    try {
+      temporary._restoreJson(source);
+    } finally {
+      temporary.masters.dispose();
+      temporary.diary.dispose();
+      temporary.lenses.dispose();
+    }
+  }
+
   void restoreJson(String source) {
+    validateJson(source);
+    _restoreJson(source);
+    _cacheReadable = true;
+  }
+
+  void _restoreJson(String source) {
     final value = jsonDecode(source) as Map<String, Object?>;
     masters.genres
       ..clear()
@@ -199,6 +257,7 @@ class AppStatePersistence {
             characterId: raw['characterId'] as String?,
             costumeId: raw['costumeId'] as String?,
             memo: raw['memo'] as String? ?? '',
+            calendarTitle: raw['calendarTitle'] as String? ?? '',
             photoId: raw['photoId'] as String?,
             lensInventoryId: raw['lensInventoryId'] as String?,
             createdAt: DateTime.parse(raw['createdAt'] as String),

@@ -40,7 +40,7 @@ DiaryEntry ── Genre / CosplayCharacter / Costume / PhotoRecord / LensInvento
 
 ファイル: `features/diary/domain/`
 
-`ActivityType` は `cosplay`、`photographer`、`other` の3種です。`DiaryEntry` は活動日、種別、任意参照、メモ、作成/更新日時を持ちます。
+`ActivityType` は `cosplay`、`photographer`、`other` の3種です。`DiaryEntry` は活動日、種別、任意参照、メモ、任意の予定名 `calendarTitle`、作成/更新日時を持ちます。`calendarTitle` はJSONに保存し、古いJSONでは空文字です。空なら連携時に種別・作品・キャラクター・衣装から予定名を生成します。既存CSV列は変更せず、予定名の移行にはJSONを使います。
 
 不変条件:
 
@@ -118,8 +118,8 @@ DiaryEntry ── Genre / CosplayCharacter / Costume / PhotoRecord / LensInvento
 
 ## バックアップと設定
 
-- ZIP形式versionは1。
-- manifestは作成時刻、CSV別データ行数、画像件数を持つ。
+- 新規保存は圧縮しないアプリ状態JSON。旧ZIP形式version 1は移行読み込みのみ。
+- 旧ZIPのmanifestは作成時刻、CSV別データ行数、画像件数を持つ。
 - 展開後合計サイズ上限の既定値は1GiB。
 - 最終バックアップがない、または30日以上経過するとリマインドする。
 - 最終バックアップ日時が未来ならリマインドしない。
@@ -129,6 +129,16 @@ DiaryEntry ── Genre / CosplayCharacter / Costume / PhotoRecord / LensInvento
 | key | 値 |
 |---|---|
 | `app_state_v1` | 3ストア全体のJSON |
-| `last_backup_at` | ISO 8601日時 |
+| `last_backup_at` | 控えの保存操作のISO 8601日時（Webはダウンロード開始時点） |
 | `photo_save_mode` | `original` または `spaceSaving` |
-| `project_target_v1` | PWAで最後に選んだ `localFile` または `googleDrive`。起動後は再接続が必要 |
+| `project_target_v1` | PWA保存モード `localFile` または `browser`。未設定/旧Drive設定は初回選択。ファイルは権限と内容一致時のみ自動再接続 |
+| `google_calendar_sync_v1` | 自動同期設定、カレンダー別同期履歴、端末共通の日次試行回数・自動実行済み印、未同期表示、最終同期。トークンは含まず、プロジェクトJSONの対象外 |
+
+## Googleカレンダー同期
+
+- 任意のWeb/PWA機能。専用副カレンダーだけを読み書きする。
+- 日記と参照マスターのID・名称・所属を同期する。マスターメモ、写真、カラコンは送らない。既存の同一IDマスターは上書きせず、不足分を追加する。
+- 予定のタイトル・活動日・メモはGoogle側の編集も取り込む。専用カレンダーの外部作成予定は「その他」の日記。繰り返し予定は非対応として停止する。
+- 履歴がある日記だけ削除を伝播する。両側更新や更新と削除の競合は手動選択し、ETag不一致時は停止する。
+- Googleからの日記削除はカラコン使用を解除し、ワンデー在庫を復元する。使用履歴がある日記の日付変更は停止する。
+- 同期試行は接続時・自動・手動・失敗を合算して端末/ブラウザごと10回/日。認証・カレンダー発見/作成・表示切替の通信は別で、APIリクエスト数の上限とは異なる。
