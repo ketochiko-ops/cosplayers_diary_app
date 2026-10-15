@@ -178,4 +178,32 @@ void main() {
     expect(find.text('メイド服（白・ショート）'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('archive tab confirms permanent deletion', (tester) async {
+    final store = MasterDataStore();
+    final genre = store.addGenre('誤登録した作品');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: MasterDataPage(store: store)),
+      ),
+    );
+    await tester.tap(find.byTooltip('誤登録した作品をアーカイブ'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('アーカイブ'));
+    await tester.pumpAndSettle();
+    expect(find.text('誤登録した作品'), findsOneWidget);
+    expect(find.text('追加'), findsNothing);
+    await tester.tap(find.byTooltip('誤登録した作品を完全に削除'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('キャンセル'));
+    await tester.pumpAndSettle();
+    expect(store.genres.single.id, genre.id);
+    await tester.tap(find.byTooltip('誤登録した作品を完全に削除'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('完全に削除'));
+    await tester.pumpAndSettle();
+    expect(store.genres, isEmpty);
+    expect(find.text('アーカイブ済みのデータはありません'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }

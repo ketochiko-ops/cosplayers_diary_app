@@ -30,7 +30,7 @@ DiaryEntry ── Genre / CosplayCharacter / Costume / PhotoRecord / LensInvento
 不変条件:
 
 - 関連には名前ではなく安定IDを使う。
-- 削除は `archived = true` の論理削除。過去の日記から参照できるようデータを残す。
+- 通常の削除操作は `archived = true` の論理削除。アーカイブ済み項目だけを確認後に完全削除できる。参照元IDは維持し、欠損をUIで「取得できませんでした」と表示する。
 - 新規選択肢にはアーカイブ済みデータを出さない。
 - 衣装候補は `genreIds` が空か選択キャラクターのジャンルを含み、かつ汎用衣装またはそのキャラクターIDを持つ固有衣装に限る。固有衣装の対象キャラクターは、ジャンルを指定した場合はそのいずれかに所属する。
 
@@ -50,7 +50,7 @@ DiaryEntry ── Genre / CosplayCharacter / Costume / PhotoRecord / LensInvento
 - 一覧は活動日時の降順。特定日の抽出結果は昇順。
 - 複製時はカラコン実物参照をクリアし、写真参照など他の値は引き継ぐ。
 
-注意: `DiaryStore.delete()` は日記だけを削除し、`LensLedger.removeDiaryUsage()` を呼びません。現行UIではカラコン使用が未接続なので表面化しませんが、接続時はapplication層で一貫して処理します。
+注意: `DiaryStore.delete()` 単体は日記だけを削除します。画面からの日記削除はAppShellのコールバックと `deleteDiary()` を経由し、カラコン使用を解除してから日記を削除します。削除前に確認ダイアログを表示します。
 
 ## カラコン
 
@@ -103,7 +103,7 @@ DiaryEntry ── Genre / CosplayCharacter / Costume / PhotoRecord / LensInvento
 - ジャンル/キャラクター/衣装ランキングは件数降順、同数ならID昇順、上位5件。
 - カラコン利用製品ID、未使用在庫、期限間近件数は呼び出し側から渡す。
 
-現行ダッシュボードはキャラクターランキングのIDをマスターデータの名前へ解決して表示します。参照先が存在しない破損データでは「不明なキャラクター」と表示します。`expiringLensCount` はまだ算出していません。
+現行ダッシュボードはキャラクターランキングのIDをマスターデータの名前へ解決して表示します。参照先が存在しない場合は「取得できませんでした」と表示します。`expiringLensCount` はまだ算出していません。
 
 ## CSV
 

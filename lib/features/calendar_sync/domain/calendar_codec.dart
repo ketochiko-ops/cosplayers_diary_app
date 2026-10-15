@@ -288,7 +288,7 @@ class CalendarCodec {
       }
       if (id != null &&
           !(masters[pair.key] as List).any((e) => e['id'] == id)) {
-        throw const FormatException('日記に関連する作品・キャラクター・衣装が見つかりません');
+        throw const FormatException('取得できませんでした: 日記に関連する作品・キャラクター・衣装を確認してください');
       }
     }
   }

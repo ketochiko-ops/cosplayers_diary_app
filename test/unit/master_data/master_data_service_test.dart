@@ -45,6 +45,33 @@ void main() {
     expect(service.activeGenres(genres).length, 2);
   });
 
+  test('only archived masters can be permanently deleted', () {
+    final store = MasterDataStore();
+    final genre = store.addGenre('作品');
+    final character = store.addCharacter(genre.id, 'キャラ');
+    final costume = store.addCostume(
+      '衣装',
+      isGeneral: false,
+      genreIds: [genre.id],
+      characterIds: [character.id],
+    );
+    expect(() => store.deleteArchivedGenre(genre.id), throwsArgumentError);
+    expect(
+      () => store.deleteArchivedCharacter(character.id),
+      throwsArgumentError,
+    );
+    expect(() => store.deleteArchivedCostume(costume.id), throwsArgumentError);
+    store.archiveGenre(genre.id);
+    store.archiveCharacter(character.id);
+    store.archiveCostume(costume.id);
+    store.deleteArchivedGenre(genre.id);
+    store.deleteArchivedCharacter(character.id);
+    store.deleteArchivedCostume(costume.id);
+    expect(store.genres, isEmpty);
+    expect(store.characters, isEmpty);
+    expect(store.costumes, isEmpty);
+  });
+
   test('genre-scoped general and multi-character costumes use IDs', () {
     final values = [
       Costume(id: 'general', name: '制服', isGeneral: true, genreId: 'g1'),

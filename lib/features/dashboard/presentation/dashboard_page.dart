@@ -28,7 +28,7 @@ class _DashboardPageState extends State<DashboardPage> {
     for (final character in widget.masterStore.characters) {
       if (character.id == id) return character.name;
     }
-    return '不明なキャラクター';
+    return '取得できませんでした';
   }
 
   @override

@@ -125,6 +125,46 @@ void main() {
     expect(masters.costumes.single.characterIds, [character.id]);
     expect(masters.costumes.single.tags, isEmpty);
   });
+
+  test(
+    'deleted archived master stays absent while diary ID survives reload',
+    () async {
+      final settings = _MemorySettingsStore();
+      final masters = MasterDataStore();
+      final genre = masters.addGenre('作品');
+      final character = masters.addCharacter(genre.id, 'キャラ');
+      final costume = masters.addCostume('衣装', isGeneral: true);
+      final diary = DiaryStore()
+        ..save(
+          DiaryEntry(
+            id: 'diary',
+            activityDate: DateTime(2026, 10, 15),
+            activityType: ActivityType.cosplay,
+            genreId: genre.id,
+            characterId: character.id,
+            costumeId: costume.id,
+          ),
+        );
+      masters.archiveCostume(costume.id);
+      masters.deleteArchivedCostume(costume.id);
+      await AppStatePersistence(
+        store: settings,
+        masters: masters,
+        diary: diary,
+        lenses: LensStore(),
+      ).save();
+      final restoredMasters = MasterDataStore();
+      final restoredDiary = DiaryStore();
+      await AppStatePersistence(
+        store: settings,
+        masters: restoredMasters,
+        diary: restoredDiary,
+        lenses: LensStore(),
+      ).load();
+      expect(restoredMasters.costumes, isEmpty);
+      expect(restoredDiary.entries.single.costumeId, costume.id);
+    },
+  );
 }
 
 class _MemorySettingsStore implements SettingsStore {

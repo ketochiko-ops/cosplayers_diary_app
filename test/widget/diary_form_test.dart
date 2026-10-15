@@ -66,6 +66,60 @@ List<String?> selections(WidgetTester tester) => tester
     .toList();
 
 void main() {
+  testWidgets('existing diary can be deleted from its editor', (tester) async {
+    final diary = DiaryStore()
+      ..save(
+        DiaryEntry(
+          id: 'mistake',
+          activityDate: DateTime(2026, 10, 15),
+          activityType: ActivityType.other,
+        ),
+      );
+    await openForm(
+      tester,
+      MasterDataStore(),
+      diary,
+      entry: diary.entries.single,
+    );
+    await tester.ensureVisible(find.text('この日記を削除'));
+    await tester.tap(find.text('この日記を削除'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('削除する'));
+    await tester.pumpAndSettle();
+    expect(diary.entries, isEmpty);
+    expect(find.text('開く'), findsOneWidget);
+  });
+
+  testWidgets('editor shows placeholders for deleted master references', (
+    tester,
+  ) async {
+    final masters = MasterDataStore();
+    final genre = masters.addGenre('作品');
+    final character = masters.addCharacter(genre.id, 'キャラ');
+    final costume = masters.addCostume('衣装', isGeneral: true);
+    final diary = DiaryStore()
+      ..save(
+        DiaryEntry(
+          id: 'historical',
+          activityDate: DateTime(2026, 10, 15),
+          activityType: ActivityType.cosplay,
+          genreId: genre.id,
+          characterId: character.id,
+          costumeId: costume.id,
+        ),
+      );
+    masters.archiveCostume(costume.id);
+    masters.deleteArchivedCostume(costume.id);
+    masters.archiveCharacter(character.id);
+    masters.deleteArchivedCharacter(character.id);
+    masters.archiveGenre(genre.id);
+    masters.deleteArchivedGenre(genre.id);
+    await openForm(tester, masters, diary, entry: diary.entries.single);
+    expect(find.text('取得できませんでした'), findsNWidgets(3));
+    expect(selections(tester), [genre.id, character.id, costume.id]);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'creates the full master chain from a diary and autosaves linked IDs without losing its draft',
     (tester) async {

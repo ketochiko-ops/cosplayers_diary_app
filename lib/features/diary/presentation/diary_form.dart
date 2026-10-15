@@ -13,6 +13,7 @@ import '../../master_data/domain/master_service.dart';
 import '../../master_data/presentation/quick_add_master_dialog.dart';
 import '../application/diary_store.dart';
 import '../domain/diary_models.dart';
+import 'confirm_diary_deletion.dart';
 
 class DiaryForm extends StatefulWidget {
   const DiaryForm({
@@ -21,6 +22,7 @@ class DiaryForm extends StatefulWidget {
     this.initialDate,
     this.entry,
     this.photos,
+    this.onDelete,
     super.key,
   });
   final DiaryStore store;
@@ -28,6 +30,7 @@ class DiaryForm extends StatefulWidget {
   final DateTime? initialDate;
   final DiaryEntry? entry;
   final PhotoController? photos;
+  final void Function(String id)? onDelete;
 
   @override
   State<DiaryForm> createState() => _DiaryFormState();
@@ -74,11 +77,22 @@ class _DiaryFormState extends State<DiaryForm> {
 
   @override
   Widget build(BuildContext context) {
-    final genres = _masters.activeGenres(widget.masterStore.genres);
+    final genres = _masters.activeGenres(widget.masterStore.genres).toList();
+    if (_genreId != null && !genres.any((value) => value.id == _genreId)) {
+      final previous = _byId(widget.masterStore.genres, _genreId);
+      if (previous != null) genres.add(previous);
+    }
     final genre = _byId(genres, _genreId);
     final characters = genre == null
         ? <CosplayCharacter>[]
-        : _masters.charactersForGenre(widget.masterStore.characters, genre);
+        : _masters
+              .charactersForGenre(widget.masterStore.characters, genre)
+              .toList();
+    if (_characterId != null &&
+        !characters.any((value) => value.id == _characterId)) {
+      final previous = _byId(widget.masterStore.characters, _characterId);
+      if (previous != null) characters.add(previous);
+    }
     final character = _byId(characters, _characterId);
     final costumes = character == null
         ? <Costume>[]
@@ -95,6 +109,13 @@ class _DiaryFormState extends State<DiaryForm> {
           .firstOrNull;
       if (previous != null) costumes.add(previous);
     }
+    final missingGenre =
+        _genreId != null && !genres.any((value) => value.id == _genreId);
+    final missingCharacter =
+        _characterId != null &&
+        !characters.any((value) => value.id == _characterId);
+    final missingCostume =
+        _costumeId != null && !costumes.any((value) => value.id == _costumeId);
     return Scaffold(
       appBar: AppBar(title: Text(widget.entry == null ? '日記を追加' : '日記を編集')),
       body: ListView(
@@ -128,10 +149,15 @@ class _DiaryFormState extends State<DiaryForm> {
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     key: ValueKey('genre:$_genreId'),
-                    initialValue: genre == null ? null : _genreId,
+                    initialValue: _genreId,
                     isExpanded: true,
                     decoration: const InputDecoration(labelText: 'ジャンル'),
                     items: [
+                      if (missingGenre)
+                        DropdownMenuItem(
+                          value: _genreId,
+                          child: const Text('取得できませんでした'),
+                        ),
                       for (final value in genres)
                         DropdownMenuItem(
                           value: value.id,
@@ -157,13 +183,18 @@ class _DiaryFormState extends State<DiaryForm> {
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     key: ValueKey('character:$_genreId:$_characterId'),
-                    initialValue: character == null ? null : _characterId,
+                    initialValue: _characterId,
                     isExpanded: true,
                     decoration: InputDecoration(
                       labelText: 'キャラクター',
                       helperText: genre == null ? '先にジャンルを選択・追加してください' : null,
                     ),
                     items: [
+                      if (missingCharacter)
+                        DropdownMenuItem(
+                          value: _characterId,
+                          child: const Text('取得できませんでした'),
+                        ),
                       for (final value in characters)
                         DropdownMenuItem(
                           value: value.id,
@@ -180,7 +211,9 @@ class _DiaryFormState extends State<DiaryForm> {
                 ),
                 IconButton(
                   tooltip: 'キャラクターを追加',
-                  onPressed: genre == null ? null : () => _addCharacter(genre),
+                  onPressed: genre == null || genre.archived
+                      ? null
+                      : () => _addCharacter(genre),
                   icon: const Icon(Icons.add_circle_outline),
                 ),
               ],
@@ -191,9 +224,7 @@ class _DiaryFormState extends State<DiaryForm> {
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     key: ValueKey('costume:$_characterId:$_costumeId'),
-                    initialValue: costumes.any((e) => e.id == _costumeId)
-                        ? _costumeId
-                        : null,
+                    initialValue: _costumeId,
                     isExpanded: true,
                     decoration: InputDecoration(
                       labelText: '衣装',
@@ -202,6 +233,11 @@ class _DiaryFormState extends State<DiaryForm> {
                           : null,
                     ),
                     items: [
+                      if (missingCostume)
+                        DropdownMenuItem(
+                          value: _costumeId,
+                          child: const Text('取得できませんでした'),
+                        ),
                       for (final value in costumes)
                         DropdownMenuItem(
                           value: value.id,
@@ -215,7 +251,7 @@ class _DiaryFormState extends State<DiaryForm> {
                 ),
                 IconButton(
                   tooltip: '衣装を追加',
-                  onPressed: character == null
+                  onPressed: character == null || character.archived
                       ? null
                       : () => _addCostume(character),
                   icon: const Icon(Icons.add_circle_outline),
@@ -281,6 +317,14 @@ class _DiaryFormState extends State<DiaryForm> {
             icon: const Icon(Icons.save),
             label: const Text('保存'),
           ),
+          if (widget.entry != null) ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _deleteEntry,
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('この日記を削除'),
+            ),
+          ],
         ],
       ),
     );
@@ -376,6 +420,12 @@ class _DiaryFormState extends State<DiaryForm> {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(error.message.toString())));
     }
+  }
+
+  Future<void> _deleteEntry() async {
+    if (!await confirmDiaryDeletion(context) || !mounted) return;
+    (widget.onDelete ?? widget.store.delete)(widget.entry!.id);
+    Navigator.pop(context);
   }
 
   Future<void> _pickPhoto() async {

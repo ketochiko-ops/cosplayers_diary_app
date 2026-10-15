@@ -183,6 +183,33 @@ class MasterDataStore extends ChangeNotifier {
   void archiveCostume(String id) =>
       _replaceCostume(id, (value) => value.copyWith(archived: true));
 
+  void deleteArchivedGenre(String id) {
+    final index = genres.indexWhere((value) => value.id == id);
+    if (index < 0 || !genres[index].archived) {
+      throw ArgumentError.value(id, 'id', 'アーカイブ済みのジャンルを選択してください');
+    }
+    genres.removeAt(index);
+    notifyListeners();
+  }
+
+  void deleteArchivedCharacter(String id) {
+    final index = characters.indexWhere((value) => value.id == id);
+    if (index < 0 || !characters[index].archived) {
+      throw ArgumentError.value(id, 'id', 'アーカイブ済みのキャラクターを選択してください');
+    }
+    characters.removeAt(index);
+    notifyListeners();
+  }
+
+  void deleteArchivedCostume(String id) {
+    final index = costumes.indexWhere((value) => value.id == id);
+    if (index < 0 || !costumes[index].archived) {
+      throw ArgumentError.value(id, 'id', 'アーカイブ済みの衣装を選択してください');
+    }
+    costumes.removeAt(index);
+    notifyListeners();
+  }
+
   void _replaceGenre(String id, Genre Function(Genre) update) {
     final index = genres.indexWhere((e) => e.id == id);
     if (index >= 0) genres[index] = update(genres[index]);

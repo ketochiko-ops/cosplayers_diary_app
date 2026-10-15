@@ -254,4 +254,77 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('calendar warns when an archived master is deleted', (
+    tester,
+  ) async {
+    final masters = MasterDataStore();
+    final genre = masters.addGenre('作品');
+    final character = masters.addCharacter(genre.id, 'キャラ');
+    final costume = masters.addCostume('衣装', isGeneral: true);
+    final diary = DiaryStore()
+      ..save(
+        DiaryEntry(
+          id: 'missing-master',
+          activityDate: DateTime(2026, 10, 15),
+          activityType: ActivityType.cosplay,
+          genreId: genre.id,
+          characterId: character.id,
+          costumeId: costume.id,
+          calendarTitle: '秋の撮影会',
+        ),
+      );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CalendarPage(
+            store: diary,
+            masterStore: masters,
+            initialMonth: DateTime(2026, 10),
+          ),
+        ),
+      ),
+    );
+    masters.archiveCostume(costume.id);
+    masters.deleteArchivedCostume(costume.id);
+    await tester.pumpAndSettle();
+    expect(find.text('⚠ 秋の撮影会'), findsOneWidget);
+    await tester.tap(find.byKey(ValueKey(DateTime(2026, 10, 15))));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('衣装: 取得できませんでした'), findsOneWidget);
+    expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('diary list confirms deletion from its menu', (tester) async {
+    final diary = DiaryStore()
+      ..save(
+        DiaryEntry(
+          id: 'mistake',
+          activityDate: DateTime(2026, 10, 15),
+          activityType: ActivityType.other,
+          calendarTitle: '誤登録',
+        ),
+      );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DiaryListPage(store: diary, masterStore: MasterDataStore()),
+      ),
+    );
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('削除'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('キャンセル'));
+    await tester.pumpAndSettle();
+    expect(diary.entries, hasLength(1));
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('削除'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('削除する'));
+    await tester.pumpAndSettle();
+    expect(diary.entries, isEmpty);
+    expect(find.text('日記はまだありません'), findsOneWidget);
+  });
 }

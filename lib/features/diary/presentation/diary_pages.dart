@@ -5,6 +5,7 @@ import '../../settings/domain/calendar_week_start.dart';
 import '../application/diary_store.dart';
 import '../domain/diary_models.dart';
 import 'diary_form.dart';
+import 'confirm_diary_deletion.dart';
 import '../../photos/application/photo_controller.dart';
 
 String _characterLabel(DiaryEntry entry, MasterDataStore masters) =>
@@ -12,14 +13,27 @@ String _characterLabel(DiaryEntry entry, MasterDataStore masters) =>
         .where((value) => value.id == entry.characterId)
         .firstOrNull
         ?.name ??
-    '不明なキャラクター';
+    '取得できませんでした';
 
 String _costumeLabel(DiaryEntry entry, MasterDataStore masters) =>
     masters.costumes
         .where((value) => value.id == entry.costumeId)
         .firstOrNull
         ?.displayName ??
-    '不明な衣装';
+    '取得できませんでした';
+
+String _genreLabel(DiaryEntry entry, MasterDataStore masters) =>
+    masters.genres
+        .where((value) => value.id == entry.genreId)
+        .firstOrNull
+        ?.name ??
+    '取得できませんでした';
+
+bool _hasMissingMaster(DiaryEntry entry, MasterDataStore masters) =>
+    entry.activityType == ActivityType.cosplay &&
+    (!masters.genres.any((value) => value.id == entry.genreId) ||
+        !masters.characters.any((value) => value.id == entry.characterId) ||
+        !masters.costumes.any((value) => value.id == entry.costumeId));
 
 String _dayPreview(DiaryEntry entry, MasterDataStore masters) {
   final title = entry.calendarTitle.trim();
@@ -36,11 +50,13 @@ class DiaryListPage extends StatelessWidget {
     required this.store,
     required this.masterStore,
     this.photos,
+    this.onDelete,
     super.key,
   });
   final DiaryStore store;
   final MasterDataStore masterStore;
   final PhotoController? photos;
+  final void Function(String id)? onDelete;
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -55,6 +71,7 @@ class DiaryListPage extends StatelessWidget {
                 store: store,
                 masterStore: masterStore,
                 photos: photos,
+                onDelete: onDelete,
               ),
             ),
       floatingActionButton: FloatingActionButton(
@@ -73,6 +90,7 @@ class DiaryListPage extends StatelessWidget {
         masterStore: masterStore,
         initialDate: date,
         photos: photos,
+        onDelete: onDelete,
       ),
     ),
   );
@@ -83,6 +101,7 @@ class CalendarPage extends StatefulWidget {
     required this.store,
     required this.masterStore,
     this.photos,
+    this.onDelete,
     this.initialMonth,
     this.weekStart = CalendarWeekStart.monday,
     super.key,
@@ -90,6 +109,7 @@ class CalendarPage extends StatefulWidget {
   final DiaryStore store;
   final MasterDataStore masterStore;
   final PhotoController? photos;
+  final void Function(String id)? onDelete;
   final DateTime? initialMonth;
   final CalendarWeekStart weekStart;
 
@@ -208,12 +228,15 @@ class _CalendarPageState extends State<CalendarPage> {
                 date,
               );
               final count = dayEntries.length;
+              final hasMissingMaster = dayEntries.any(
+                (entry) => _hasMissingMaster(entry, widget.masterStore),
+              );
               final preview = count == 0
                   ? ''
                   : _dayPreview(dayEntries.first, widget.masterStore);
               return Semantics(
                 label:
-                    '${date.year}年${date.month}月${date.day}日、活動$count件${count == 0 ? '' : '、$preview'}',
+                    '${date.year}年${date.month}月${date.day}日、活動$count件${hasMissingMaster ? '、参照データを取得できませんでした' : ''}${count == 0 ? '' : '、$preview'}',
                 selected: DateUtils.isSameDay(_selected, date),
                 child: InkWell(
                   key: ValueKey(date),
@@ -221,8 +244,15 @@ class _CalendarPageState extends State<CalendarPage> {
                   child: Container(
                     margin: const EdgeInsets.all(1),
                     decoration: BoxDecoration(
-                      color: DateUtils.isSameDay(_selected, date)
+                      color: hasMissingMaster
+                          ? Theme.of(context).colorScheme.errorContainer
+                          : DateUtils.isSameDay(_selected, date)
                           ? Theme.of(context).colorScheme.secondaryContainer
+                          : null,
+                      border: hasMissingMaster
+                          ? Border.all(
+                              color: Theme.of(context).colorScheme.error,
+                            )
                           : null,
                       borderRadius: BorderRadius.circular(8),
                     ),
@@ -237,7 +267,7 @@ class _CalendarPageState extends State<CalendarPage> {
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 2),
                             child: Text(
-                              count > 1 ? '$count件 $preview' : preview,
+                              '${hasMissingMaster ? '⚠ ' : ''}${count > 1 ? '$count件 $preview' : preview}',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(fontSize: 10),
@@ -263,6 +293,7 @@ class _CalendarPageState extends State<CalendarPage> {
                         store: widget.store,
                         masterStore: widget.masterStore,
                         photos: widget.photos,
+                        onDelete: widget.onDelete,
                         initialDate: _selected,
                       ),
                     ),
@@ -291,6 +322,7 @@ class _CalendarPageState extends State<CalendarPage> {
                 store: widget.store,
                 masterStore: widget.masterStore,
                 photos: widget.photos,
+                onDelete: widget.onDelete,
               ),
             ),
         ],
@@ -318,24 +350,34 @@ class DiaryTile extends StatelessWidget {
     required this.store,
     required this.masterStore,
     this.photos,
+    this.onDelete,
     super.key,
   });
   final DiaryEntry entry;
   final DiaryStore store;
   final MasterDataStore masterStore;
   final PhotoController? photos;
+  final void Function(String id)? onDelete;
 
   @override
   Widget build(BuildContext context) {
+    final missingMaster = _hasMissingMaster(entry, masterStore);
     final details = <String>[
+      if (missingMaster) '⚠ 参照先を取得できませんでした',
       if (entry.calendarTitle.trim().isNotEmpty)
         'イベント: ${entry.calendarTitle.trim()}',
       if (entry.activityType == ActivityType.cosplay)
-        'キャラ: ${_characterLabel(entry, masterStore)}  /  衣装: ${_costumeLabel(entry, masterStore)}',
+        'ジャンル: ${_genreLabel(entry, masterStore)}  /  キャラ: ${_characterLabel(entry, masterStore)}  /  衣装: ${_costumeLabel(entry, masterStore)}',
       if (entry.memo.trim().isNotEmpty) 'メモ: ${entry.memo.trim()}',
     ];
     return ListTile(
-      leading: CircleAvatar(child: Icon(_icon(entry.activityType))),
+      leading: CircleAvatar(
+        child: Icon(
+          missingMaster
+              ? Icons.warning_amber_rounded
+              : _icon(entry.activityType),
+        ),
+      ),
       title: Text(
         '${entry.activityDate.year}/${entry.activityDate.month}/${entry.activityDate.day}  ${entry.activityType.label}',
       ),
@@ -355,12 +397,15 @@ class DiaryTile extends StatelessWidget {
             masterStore: masterStore,
             entry: entry,
             photos: photos,
+            onDelete: onDelete,
           ),
         ),
       ),
       trailing: PopupMenuButton<String>(
-        onSelected: (value) {
-          if (value == 'delete') store.delete(entry.id);
+        onSelected: (value) async {
+          if (value == 'delete' && await confirmDiaryDeletion(context)) {
+            (onDelete ?? store.delete)(entry.id);
+          }
           if (value == 'duplicate') store.duplicate(entry, DateTime.now());
         },
         itemBuilder: (_) => const [

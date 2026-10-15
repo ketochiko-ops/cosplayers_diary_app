@@ -113,4 +113,18 @@ void main() {
       throwsFormatException,
     );
   });
+  test('missing master reports an understandable sync error', () {
+    final state = calendarState();
+    (state['costumes'] as List).clear();
+    expect(
+      () => codec.encode((state['diary'] as List).single, state),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          contains('取得できませんでした'),
+        ),
+      ),
+    );
+  });
 }

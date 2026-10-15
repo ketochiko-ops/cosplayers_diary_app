@@ -7,6 +7,7 @@ import 'router.dart';
 import 'theme.dart';
 import '../features/master_data/application/master_data_store.dart';
 import '../features/diary/application/diary_store.dart';
+import '../features/diary/application/delete_diary.dart';
 import '../features/diary/presentation/diary_pages.dart';
 import '../features/contact_lenses/application/lens_store.dart';
 import '../features/master_data/presentation/management_page.dart';
@@ -65,6 +66,9 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   bool _setupScheduled = false;
   Timer? _fileMonitor;
   bool get _requiresProject => kIsWeb || widget.projectStorage != null;
+
+  void _deleteDiary(String id) =>
+      deleteDiary(diary: _diaryStore, lenses: _lensStore, id: id);
 
   @override
   void initState() {
@@ -220,12 +224,14 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         store: _diaryStore,
         masterStore: _masterStore,
         photos: _photos,
+        onDelete: _deleteDiary,
         weekStart: _weekStart,
       ),
       1 => DiaryListPage(
         store: _diaryStore,
         masterStore: _masterStore,
         photos: _photos,
+        onDelete: _deleteDiary,
       ),
       2 => ManagementPage(masterStore: _masterStore, lensStore: _lensStore),
       3 => DashboardPage(

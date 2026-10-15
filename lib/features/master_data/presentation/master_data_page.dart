@@ -32,7 +32,7 @@ class MasterDataPage extends StatefulWidget {
 
 class _MasterDataPageState extends State<MasterDataPage>
     with SingleTickerProviderStateMixin {
-  late final TabController _tabs = TabController(length: 3, vsync: this);
+  late final TabController _tabs = TabController(length: 4, vsync: this);
 
   @override
   void dispose() {
@@ -42,21 +42,55 @@ class _MasterDataPageState extends State<MasterDataPage>
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-    animation: widget.store,
+    animation: Listenable.merge([widget.store, _tabs]),
     builder: (context, _) {
       final genres = widget.store.genres.where((e) => !e.archived).toList();
       final characters = widget.store.characters
           .where((e) => !e.archived)
           .toList();
       final costumes = widget.store.costumes.where((e) => !e.archived).toList();
+      final archived = <_ArchivedMasterRow>[
+        for (final genre in widget.store.genres.where((e) => e.archived))
+          _ArchivedMasterRow(
+            kind: _MasterKind.genre,
+            name: genre.name,
+            onDelete: () =>
+                _deleteArchived(_MasterKind.genre, genre.id, genre.name),
+          ),
+        for (final character in widget.store.characters.where(
+          (e) => e.archived,
+        ))
+          _ArchivedMasterRow(
+            kind: _MasterKind.character,
+            name: character.name,
+            onDelete: () => _deleteArchived(
+              _MasterKind.character,
+              character.id,
+              character.name,
+            ),
+          ),
+        for (final costume in widget.store.costumes.where((e) => e.archived))
+          _ArchivedMasterRow(
+            kind: _MasterKind.costume,
+            name: costume.displayName,
+            onDelete: () => _deleteArchived(
+              _MasterKind.costume,
+              costume.id,
+              costume.displayName,
+            ),
+          ),
+      ];
       return Column(
         children: [
           TabBar(
             controller: _tabs,
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
             tabs: const [
               Tab(text: 'ジャンル'),
               Tab(text: 'キャラクター'),
               Tab(text: '衣装'),
+              Tab(text: 'アーカイブ'),
             ],
           ),
           Expanded(
@@ -80,10 +114,12 @@ class _MasterDataPageState extends State<MasterDataPage>
                     for (final character in characters)
                       _MasterRow(
                         name: character.name,
-                        detail: widget.store.genres
-                            .where((e) => e.id == character.genreId)
-                            .firstOrNull
-                            ?.name,
+                        detail:
+                            widget.store.genres
+                                .where((e) => e.id == character.genreId)
+                                .firstOrNull
+                                ?.name ??
+                            '取得できませんでした',
                         onEdit: () =>
                             _edit(_MasterKind.character, character: character),
                         onArchive: () =>
@@ -98,7 +134,7 @@ class _MasterDataPageState extends State<MasterDataPage>
                       _MasterRow(
                         name: costume.displayName,
                         detail:
-                            '${costume.genreIds.isEmpty ? '全ジャンル' : costume.genreIds.map((id) => widget.store.genres.where((e) => e.id == id).firstOrNull?.name ?? '不明なジャンル').join('、')} · ${costume.isGeneral ? '汎用衣装' : '固有衣装 · ${costume.characterIds.map((id) => widget.store.characters.where((e) => e.id == id).firstOrNull?.name ?? '不明なキャラクター').join('、')}'}',
+                            '${costume.genreIds.isEmpty ? '全ジャンル' : costume.genreIds.map((id) => widget.store.genres.where((e) => e.id == id).firstOrNull?.name ?? '取得できませんでした').join('、')} · ${costume.isGeneral ? '汎用衣装' : '固有衣装 · ${costume.characterIds.map((id) => widget.store.characters.where((e) => e.id == id).firstOrNull?.name ?? '取得できませんでした').join('、')}'}',
                         onEdit: () =>
                             _edit(_MasterKind.costume, costume: costume),
                         onArchive: () =>
@@ -106,21 +142,58 @@ class _MasterDataPageState extends State<MasterDataPage>
                       ),
                   ],
                 ),
+                _ArchivedMasterList(entries: archived),
               ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: FilledButton.icon(
-              onPressed: _add,
-              icon: const Icon(Icons.add),
-              label: const Text('追加'),
+          if (_tabs.index != 3)
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: FilledButton.icon(
+                onPressed: _add,
+                icon: const Icon(Icons.add),
+                label: const Text('追加'),
+              ),
             ),
-          ),
         ],
       );
     },
   );
+
+  Future<void> _deleteArchived(_MasterKind kind, String id, String name) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('$nameを完全に削除しますか？'),
+        content: const Text(
+          'この操作は元に戻せません。日記や他のマスターから参照されている場合は「取得できませんでした」と表示されます。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('キャンセル'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('完全に削除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      switch (kind) {
+        case _MasterKind.genre:
+          widget.store.deleteArchivedGenre(id);
+        case _MasterKind.character:
+          widget.store.deleteArchivedCharacter(id);
+        case _MasterKind.costume:
+          widget.store.deleteArchivedCostume(id);
+      }
+    } on ArgumentError catch (error) {
+      _showError(error);
+    }
+  }
 
   Future<void> _add() async {
     final kind = _MasterKind.values[_tabs.index];
@@ -203,6 +276,42 @@ class _MasterRow {
   final String? detail;
   final VoidCallback onEdit;
   final VoidCallback onArchive;
+}
+
+class _ArchivedMasterRow {
+  const _ArchivedMasterRow({
+    required this.kind,
+    required this.name,
+    required this.onDelete,
+  });
+  final _MasterKind kind;
+  final String name;
+  final VoidCallback onDelete;
+}
+
+class _ArchivedMasterList extends StatelessWidget {
+  const _ArchivedMasterList({required this.entries});
+  final List<_ArchivedMasterRow> entries;
+
+  @override
+  Widget build(BuildContext context) {
+    if (entries.isEmpty) return const Center(child: Text('アーカイブ済みのデータはありません'));
+    return ListView.builder(
+      itemCount: entries.length,
+      itemBuilder: (context, index) {
+        final entry = entries[index];
+        return ListTile(
+          title: Text(entry.name),
+          subtitle: Text(entry.kind.label),
+          trailing: IconButton(
+            tooltip: '${entry.name}を完全に削除',
+            icon: const Icon(Icons.delete_forever_outlined),
+            onPressed: entry.onDelete,
+          ),
+        );
+      },
+    );
+  }
 }
 
 class _MasterList extends StatelessWidget {
@@ -327,7 +436,7 @@ class _MasterEditorDialogState extends State<_MasterEditorDialog> {
                     Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
-                        'ジャンル: ${widget.store.genres.where((e) => e.id == _parentId).firstOrNull?.name ?? '不明'}',
+                        'ジャンル: ${widget.store.genres.where((e) => e.id == _parentId).firstOrNull?.name ?? '取得できませんでした'}',
                       ),
                     )
                   else
@@ -387,6 +496,17 @@ class _MasterEditorDialogState extends State<_MasterEditorDialog> {
                         }
                       }),
                     ),
+                  for (final id in _selectedGenres.where(
+                    (id) => !widget.store.genres.any((e) => e.id == id),
+                  ))
+                    CheckboxListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('取得できませんでした'),
+                      value: true,
+                      onChanged: (_) =>
+                          setState(() => _selectedGenres.remove(id)),
+                    ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<bool>(
                     initialValue: _isGeneral,
@@ -421,6 +541,17 @@ class _MasterEditorDialogState extends State<_MasterEditorDialog> {
                             _selectedCharacters.remove(character.id);
                           }
                         }),
+                      ),
+                    for (final id in _selectedCharacters.where(
+                      (id) => !widget.store.characters.any((e) => e.id == id),
+                    ))
+                      CheckboxListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('取得できませんでした'),
+                        value: true,
+                        onChanged: (_) =>
+                            setState(() => _selectedCharacters.remove(id)),
                       ),
                     if (_showCharacterError)
                       Text(
