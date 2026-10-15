@@ -279,6 +279,7 @@ class _MasterEditorDialogState extends State<_MasterEditorDialog> {
       title: Text('${widget.kind.label}を${editing ? '編集' : '追加'}'),
       content: SizedBox(
         width: 360,
+        height: widget.kind == _MasterKind.costume ? 228 : null,
         child: Form(
           key: _formKey,
           child: SingleChildScrollView(
