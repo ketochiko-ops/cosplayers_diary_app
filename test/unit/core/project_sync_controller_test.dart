@@ -33,8 +33,8 @@ void main() {
   });
 
   Future<void> connect() async {
-    final snapshot = await sync.createLocalFile();
-    await sync.uploadCurrent(ProjectTarget.localFile, snapshot!);
+    final snapshot = await sync.createLocalFolder();
+    await sync.uploadCurrent(ProjectTarget.localFolder, snapshot!);
     files.writes = 0;
   }
 
@@ -43,7 +43,7 @@ void main() {
     () async {
       expect(sync.requiresSelection, isTrue);
       files.cancel = true;
-      expect(await sync.createLocalFile(), isNull);
+      expect(await sync.createLocalFolder(), isNull);
       expect(sync.requiresSelection, isTrue);
     },
   );
@@ -69,8 +69,8 @@ void main() {
       expect(sync.requiresSelection, isTrue);
       expect(sync.paused, isTrue);
       expect(settings.values[AppStatePersistence.stateKey], contains('未保存の変更'));
-      final replacement = await sync.createLocalFile();
-      await sync.uploadCurrent(ProjectTarget.localFile, replacement!);
+      final replacement = await sync.createLocalFolder();
+      await sync.uploadCurrent(ProjectTarget.localFolder, replacement!);
       expect(files.content, contains('未保存の変更'));
       expect(sync.requiresSelection, isFalse);
     },
@@ -79,7 +79,7 @@ void main() {
   test('read failure without an edit requires selection', () async {
     await connect();
     files.available = false;
-    await sync.checkFile();
+    await sync.checkFolder();
     expect(sync.requiresSelection, isTrue);
     expect(sync.message, contains('再指定'));
   });
@@ -87,7 +87,7 @@ void main() {
   test('external changes are not overwritten', () async {
     await connect();
     files.content = files.revision = 'changed elsewhere';
-    await sync.checkFile();
+    await sync.checkFolder();
     masters.addGenre('端末側');
     await persistence.save();
     expect(sync.requiresSelection, isTrue);
@@ -104,7 +104,7 @@ void main() {
     );
     await expectLater(
       sync.useProject(
-        ProjectTarget.localFile,
+        ProjectTarget.localFolder,
         ProjectSnapshot(
           content: malformed,
           revision: malformed,
@@ -121,11 +121,11 @@ void main() {
     () async {
       await settings.writeSetting(
         ProjectSyncController.preferenceKey,
-        'localFile',
+        'localFolder',
       );
       files.content = files.revision = persistence.exportJson();
       await sync.loadPreference();
-      await sync.tryResumeLocalFile();
+      await sync.tryResumeLocalFolder();
       expect(sync.requiresSelection, isFalse);
     },
   );
@@ -135,17 +135,17 @@ void main() {
     () async {
       await settings.writeSetting(
         ProjectSyncController.preferenceKey,
-        'localFile',
+        'localFolder',
       );
       masters.addGenre('端末の変更');
       final cached = persistence.exportJson();
       files.content = files.revision = cached.replaceFirst('端末の変更', 'ファイルの変更');
       await sync.loadPreference();
-      await sync.tryResumeLocalFile();
+      await sync.tryResumeLocalFolder();
       expect(sync.requiresSelection, isTrue);
       expect(persistence.exportJson(), cached);
       files.permission = false;
-      await sync.tryResumeLocalFile();
+      await sync.tryResumeLocalFolder();
       expect(sync.requiresSelection, isTrue);
     },
   );
@@ -157,7 +157,7 @@ void main() {
       await sync.useBrowserMode();
       masters.addGenre('Safari');
       await persistence.save();
-      await sync.checkFile();
+      await sync.checkFolder();
       expect(sync.requiresSelection, isFalse);
       expect(settings.values[AppStatePersistence.stateKey], contains('Safari'));
       expect(files.writes, 0);
@@ -168,7 +168,7 @@ void main() {
         storage: files,
       );
       await restarted.loadPreference();
-      await restarted.tryResumeLocalFile();
+      await restarted.tryResumeLocalFolder();
       expect(restarted.browserMode, isTrue);
       expect(restarted.requiresSelection, isFalse);
     },
@@ -189,4 +189,44 @@ void main() {
       expect(sync.browserMode, isFalse);
     },
   );
+
+  test(
+    'old file-mode preference requires migration without touching its JSON',
+    () async {
+      settings.values[ProjectSyncController.preferenceKey] = 'localFile';
+      files.content = files.revision = persistence.exportJson();
+      await sync.loadPreference();
+      await sync.tryResumeLocalFolder();
+      expect(sync.requiresSelection, isTrue);
+      expect(sync.message, contains('フォルダ方式'));
+      expect(files.writes, 0);
+    },
+  );
+
+  test('a missing folder image cannot replace the current masters', () async {
+    masters.addGenre('現在の作品');
+    final before = persistence.exportJson();
+    files.content = files.revision = before.replaceFirst('現在の作品', '別の作品');
+    files.failAssets = true;
+    await expectLater(
+      sync.useProject(ProjectTarget.localFolder, files.snapshot),
+      throwsStateError,
+    );
+    expect(persistence.exportJson(), before);
+    expect(sync.requiresSelection, isTrue);
+  });
+
+  test('a folder changed after selection cannot replace live data', () async {
+    masters.addGenre('現在の作品');
+    final before = persistence.exportJson();
+    files.content = files.revision = before.replaceFirst('現在の作品', '選択時の作品');
+    final snapshot = files.snapshot;
+    files.content = files.revision = before.replaceFirst('現在の作品', '外部の作品');
+    await expectLater(
+      sync.useProject(ProjectTarget.localFolder, snapshot),
+      throwsStateError,
+    );
+    expect(persistence.exportJson(), before);
+    expect(files.content, contains('外部の作品'));
+  });
 }

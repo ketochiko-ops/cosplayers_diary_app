@@ -29,7 +29,7 @@ Android releaseは `flutter build appbundle --release`、iOS releaseはmacOS/Xco
 
 Web/PWAはローカル確認に `flutter run -d chrome`、Vercel用リリース生成に `flutter build web --release --pwa-strategy=none --base-href /` を使います。独自の `app_service_worker.js` を使うため、Flutter生成Service Workerは無効化します。HTTPS配信先はVercelの `cosplayers-diary-app` プロジェクトです。VercelのGit自動デプロイは無効で、公開はGitHub Actionsが生成する検証済みprebuilt成果物だけを使用します。
 
-PWAは初回に指定ファイル（対応ブラウザ）かブラウザ保存（Safari対応）を選びます。設定から切替可能です。Google Drive連携と `GOOGLE_OAUTH_CLIENT_ID` ビルド設定は削除しました。JS境界のテストは `node tool/project_storage_test.mjs`、起動/再指定/モード切替は `test/widget/project_setup_test.dart`、障害・競合は `project_sync_controller_test.dart` で確認します。
+PWAは初回に指定フォルダ（対応ブラウザ）かブラウザ保存（Safari対応）を選びます。設定から切替可能です。Google Drive連携と `GOOGLE_OAUTH_CLIENT_ID` ビルド設定は削除しました。JS境界のテストは `node tool/project_storage_test.mjs`、起動/再指定/モード切替は `test/widget/project_setup_test.dart`、障害・競合は `project_sync_controller_test.dart` で確認します。
 
 任意のGoogleカレンダー連携は別の公開クライアントID `GOOGLE_CALENDAR_CLIENT_ID` を使用します。OAuthの運営者設定と利用手順は [`../google-calendar.md`](../google-calendar.md)。`flutter test test/unit/calendar_sync test/widget/calendar_sync_card_test.dart` と `node tool/calendar_sync_test.mjs` で同期規則・回数制限・UI・GIS/API境界を検証します。実Googleアカウント、Safariでの認証、Gemini検索はOAuth設定後に別途確認が必要です。
 
@@ -121,7 +121,7 @@ test/
 
 ### 機能接続
 
-- 日記フォームに写真選択、プレビュー、差し替え、削除がない。
+- 日記画像の追加・プレビュー・差し替え・取り外しは接続済み。画像の物理削除と拡大専用ビューは未実装。
 - 日記フォームにカラコン購入/実物の選択、開封、使用解除がない。
 - マスター追加UIで所属ジャンル、専用衣装、メモ、カラコン候補を指定できない。
 - 単独CSVを選択して検証/preview/反映するUIとapplication処理がない。
@@ -132,16 +132,16 @@ test/
 - `DiaryStore.delete()` とカラコン使用解除が連動していない。
 - `restoreJson()` は全体検証後に復元する。JSON/旧ZIPの読み込み失敗は設定画面へ通知する。
 - 旧ZIP移行の検査はmanifestのCSV行数と実内容を照合しない。
-- バックアップ作成は画像ファイルを収集せず、写真メタデータも状態に含まない。
+- 手動JSONバックアップは画像をBase64で同梱するため、画像数が多いとメモリと容量を使う。フォルダ保存ではフォルダ全体のコピーも利用できる。
 - ID生成は各クラス内の `DateTime.now().microsecondsSinceEpoch + sequence` で、共通ID生成器や注入可能なClockを使っていない。
 - `Clock` 抽象は存在するが、多くのUI/store/domain modelが `DateTime.now()` を直接使用する。
-- SQLite/localStorage自体の自動保存例外をユーザーへ通知・再試行する仕組みがない。PWA指定ファイルの例外は必須の再指定画面を表示し、外部保存と編集を停止する。
+- SQLite/localStorage自体の自動保存例外をユーザーへ通知・再試行する仕組みがない。PWA指定フォルダの例外は必須の再指定画面を表示し、外部保存と編集を停止する。
 
 ### 保守性
 
 - `csv`、`image_picker`、`path_provider`、`share_plus` は、少なくとも現行 `lib/` から一部または全部が未使用。
 - Vercelの自動公開にはGitHub ActionsのRepository secret `VERCEL_TOKEN` が必要。`VERCEL_ORG_ID` と `VERCEL_PROJECT_ID` はワークフローの固定環境変数で管理する。
-- app state JSONのschema versionがpayload内にない。キー名だけが `app_state_v1`。
+- app stateの保存キーは既存の `app_state_v1` を維持し、payloadに `projectFormat: 2` と画像一覧を追加している。旧JSONは後方互換で読む。
 - ストアのListが外部から直接変更可能で、変更時に通知や保存を迂回できる。
 
 ## 作業完了チェック
@@ -154,3 +154,7 @@ test/
 - 対象test、全 `flutter test`、`flutter analyze` を実行したか。
 - 実行できない検証は、環境理由とともに明示したか。
 - 実装とADLが一致しているか。
+
+## プロジェクトフォルダと画像
+
+仕様・移行は [`../project-folders.md`](../project-folders.md)。`ProjectStorage.assets` が画像キャッシュのFileStore境界、`loadAssets()` が選択したフォルダからの検証済み取り込みです。フォルダJSONは画像の参照のみ、手動BackupCoordinatorは非同期で画像を同梱します。日記写真を変更する場合はPhotoController、JSONメタデータ、フォルダの先行画像保存、画像付きバックアップの往復を一緒に確認してください。`tool/project_storage_test.mjs` は空フォルダ・画像の欠損/外部更新・権限・非破壊・パス検証を含みます。

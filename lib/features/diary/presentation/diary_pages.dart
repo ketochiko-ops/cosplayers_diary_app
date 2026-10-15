@@ -4,15 +4,18 @@ import '../../master_data/application/master_data_store.dart';
 import '../application/diary_store.dart';
 import '../domain/diary_models.dart';
 import 'diary_form.dart';
+import '../../photos/application/photo_controller.dart';
 
 class DiaryListPage extends StatelessWidget {
   const DiaryListPage({
     required this.store,
     required this.masterStore,
+    this.photos,
     super.key,
   });
   final DiaryStore store;
   final MasterDataStore masterStore;
+  final PhotoController? photos;
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -26,6 +29,7 @@ class DiaryListPage extends StatelessWidget {
                 entry: store.entries[index],
                 store: store,
                 masterStore: masterStore,
+                photos: photos,
               ),
             ),
       floatingActionButton: FloatingActionButton(
@@ -39,8 +43,12 @@ class DiaryListPage extends StatelessWidget {
   void _open(BuildContext context, {DateTime? date}) => Navigator.push(
     context,
     MaterialPageRoute(
-      builder: (_) =>
-          DiaryForm(store: store, masterStore: masterStore, initialDate: date),
+      builder: (_) => DiaryForm(
+        store: store,
+        masterStore: masterStore,
+        initialDate: date,
+        photos: photos,
+      ),
     ),
   );
 }
@@ -49,10 +57,12 @@ class CalendarPage extends StatefulWidget {
   const CalendarPage({
     required this.store,
     required this.masterStore,
+    this.photos,
     super.key,
   });
   final DiaryStore store;
   final MasterDataStore masterStore;
+  final PhotoController? photos;
 
   @override
   State<CalendarPage> createState() => _CalendarPageState();
@@ -152,6 +162,7 @@ class _CalendarPageState extends State<CalendarPage> {
                           entry: entry,
                           store: widget.store,
                           masterStore: widget.masterStore,
+                          photos: widget.photos,
                         ),
                     ],
                   ),
@@ -166,6 +177,7 @@ class _CalendarPageState extends State<CalendarPage> {
                     builder: (_) => DiaryForm(
                       store: widget.store,
                       masterStore: widget.masterStore,
+                      photos: widget.photos,
                       initialDate: _selected,
                     ),
                   ),
@@ -185,11 +197,13 @@ class DiaryTile extends StatelessWidget {
     required this.entry,
     required this.store,
     required this.masterStore,
+    this.photos,
     super.key,
   });
   final DiaryEntry entry;
   final DiaryStore store;
   final MasterDataStore masterStore;
+  final PhotoController? photos;
 
   @override
   Widget build(BuildContext context) => ListTile(
@@ -203,8 +217,12 @@ class DiaryTile extends StatelessWidget {
     onTap: () => Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) =>
-            DiaryForm(store: store, masterStore: masterStore, entry: entry),
+        builder: (_) => DiaryForm(
+          store: store,
+          masterStore: masterStore,
+          entry: entry,
+          photos: photos,
+        ),
       ),
     ),
     trailing: PopupMenuButton<String>(

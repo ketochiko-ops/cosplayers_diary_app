@@ -19,6 +19,8 @@ import '../features/settings/presentation/settings_page.dart';
 import '../features/settings/presentation/project_setup.dart';
 import '../features/calendar_sync/application/calendar_sync_controller.dart';
 import '../features/calendar_sync/infrastructure/calendar_transport.dart';
+import '../features/photos/application/photo_controller.dart';
+import '../features/photos/infrastructure/default_photo_files.dart';
 
 class CosplayDiaryApp extends StatelessWidget {
   const CosplayDiaryApp({this.settingsStore, this.projectStorage, super.key});
@@ -54,6 +56,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   AppStatePersistence? _persistence;
   ProjectSyncController? _projectSync;
   CalendarSyncController? _calendarSync;
+  PhotoController? _photos;
   int _projectVersion = 0;
   bool _loading = false;
   bool _setupOpen = false;
@@ -98,6 +101,12 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   }
 
   Future<void> _load() async {
+    _photos = PhotoController(
+      persistence: _persistence!,
+      files: _requiresProject
+          ? _projectSync!.storage.assets
+          : await openPhotoFiles(),
+    );
     Object? cacheError;
     try {
       await _persistence!.load();
@@ -109,7 +118,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     if (cacheError != null) {
       _projectSync!.reportCacheError(cacheError);
     } else if (_requiresProject) {
-      await _projectSync!.tryResumeLocalFile();
+      await _projectSync!.tryResumeLocalFolder();
     }
     await _calendarSync!.load();
     _persistence!.attach();
@@ -117,7 +126,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     setState(() => _loading = false);
     if (_requiresProject) {
       _fileMonitor = Timer.periodic(const Duration(seconds: 5), (_) {
-        unawaited(_projectSync!.checkFile());
+        unawaited(_projectSync!.checkFolder());
       });
       _projectChanged();
     }
@@ -126,7 +135,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && _requiresProject && !_loading) {
-      unawaited(_projectSync?.checkFile());
+      unawaited(_projectSync?.checkFolder());
     }
   }
 
@@ -202,8 +211,16 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
     }
     final wide = MediaQuery.sizeOf(context).width >= 600;
     final body = switch (_index) {
-      0 => CalendarPage(store: _diaryStore, masterStore: _masterStore),
-      1 => DiaryListPage(store: _diaryStore, masterStore: _masterStore),
+      0 => CalendarPage(
+        store: _diaryStore,
+        masterStore: _masterStore,
+        photos: _photos,
+      ),
+      1 => DiaryListPage(
+        store: _diaryStore,
+        masterStore: _masterStore,
+        photos: _photos,
+      ),
       2 => ManagementPage(masterStore: _masterStore, lensStore: _lensStore),
       3 => DashboardPage(
         diaryStore: _diaryStore,
@@ -215,6 +232,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
         persistence: _persistence,
         projectSync: _projectSync,
         calendarSync: _calendarSync,
+        photoFiles: _photos?.files,
         onProjectLoaded: () {
           unawaited(_calendarSync?.disconnect(projectChanged: true));
           setState(() {});

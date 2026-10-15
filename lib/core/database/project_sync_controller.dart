@@ -42,25 +42,30 @@ class ProjectSyncController extends ChangeNotifier {
   Future<void> loadPreference() async {
     _preferredTarget = await settings.readSetting(preferenceKey);
     _browserMode = _preferredTarget == 'browser';
+    if (_preferredTarget == 'localFile') {
+      _message =
+          'プロジェクトフォルダ方式へ変更しました。端末のデータを引き継いで空のフォルダに作成するか、旧JSONを読み込んで移行してください。';
+    }
   }
 
-  Future<void> tryResumeLocalFile() async {
+  Future<void> tryResumeLocalFolder() async {
     if (_browserMode ||
-        !storage.supportsLocalFile ||
-        _preferredTarget != ProjectTarget.localFile.name) {
+        !storage.supportsLocalFolder ||
+        _preferredTarget != ProjectTarget.localFolder.name) {
       return;
     }
     try {
-      final snapshot = await storage.reconnectLocalFile();
+      final snapshot = await storage.reconnectLocalFolder();
       if (snapshot == null) return;
       validate(snapshot.content ?? '');
       if (snapshot.content != persistence.exportJson()) {
-        _requireSelection('前回のファイルと端末に残る内容が異なります。使用する内容を選んでください。');
+        _requireSelection('前回のフォルダと端末に残る内容が異なります。使用する内容を選んでください。');
         return;
       }
-      await _activate(ProjectTarget.localFile, snapshot);
+      await storage.loadAssets();
+      await _activate(ProjectTarget.localFolder, snapshot);
     } catch (error) {
-      _requireSelection('前回のプロジェクトファイルを読み込めません。保存先を再指定してください: $error');
+      _requireSelection('前回のプロジェクトフォルダを読み込めません。保存先を再指定してください: $error');
     }
   }
 
@@ -79,7 +84,7 @@ class ProjectSyncController extends ChangeNotifier {
       await _io;
       return await choose();
     } catch (error) {
-      _requireSelection('ファイルを指定できませんでした: $error');
+      _requireSelection('フォルダを指定できませんでした: $error');
       rethrow;
     } finally {
       _busy = false;
@@ -87,20 +92,25 @@ class ProjectSyncController extends ChangeNotifier {
     }
   }
 
-  Future<ProjectSnapshot?> openLocalFile() => _choose(storage.openLocalFile);
-  Future<ProjectSnapshot?> createLocalFile() =>
-      _choose(() => storage.createLocalFile(persistence.exportJson()));
-  Future<ProjectSnapshot?> reconnectLocalFile() =>
-      _choose(() => storage.reconnectLocalFile(requestPermission: true));
+  Future<ProjectSnapshot?> openLocalFolder() =>
+      _choose(storage.openLocalFolder);
+  Future<ProjectSnapshot?> createLocalFolder() =>
+      _choose(() => storage.createLocalFolder(persistence.exportJson()));
+  Future<ProjectSnapshot?> reconnectLocalFolder() =>
+      _choose(() => storage.reconnectLocalFolder(requestPermission: true));
 
   void validate(String source) => persistence.validateJson(source);
+  void projectImported() {
+    _loadedProjectVersion++;
+    notifyListeners();
+  }
 
   Future<void> useProject(
     ProjectTarget target,
     ProjectSnapshot snapshot,
   ) async {
     final content = snapshot.content;
-    if (content == null) throw const FormatException('プロジェクトファイルが空です');
+    if (content == null) throw const FormatException('プロジェクトフォルダが空です');
     validate(content);
     _busy = true;
     _target = null;
@@ -109,10 +119,17 @@ class ProjectSyncController extends ChangeNotifier {
     try {
       await persistence.flush();
       await _io;
-      persistence.restoreJson(content);
+      await storage.loadAssets();
+      final normalized = persistence.normalizeJson(content);
+      final written = await storage.write(
+        target,
+        normalized,
+        snapshot.revision,
+      );
+      persistence.restoreJson(normalized);
       _loadedProjectVersion++;
       await persistence.save();
-      await _activate(target, snapshot);
+      await _activate(target, written);
     } catch (error) {
       _requireSelection('プロジェクトを読み込めませんでした: $error');
       rethrow;
@@ -169,7 +186,7 @@ class ProjectSyncController extends ChangeNotifier {
         notifyListeners();
       } catch (error) {
         _requireSelection(
-          'プロジェクトファイルに保存できません。保存場所を再指定してください。変更内容は端末に保持しています: $error',
+          'プロジェクトフォルダに保存できません。保存場所を再指定してください。変更内容は端末に保持しています: $error',
         );
       }
     });
@@ -177,17 +194,17 @@ class ProjectSyncController extends ChangeNotifier {
   }
 
   // Reads are serialized with writes to avoid treating our own save as a conflict.
-  Future<void> checkFile() {
+  Future<void> checkFolder() {
     if (_browserMode || requiresSelection || _busy) return Future<void>.value();
     _io = _io.then((_) async {
       if (_browserMode || requiresSelection || _busy) return;
       try {
-        final snapshot = await storage.readLocalFile();
+        final snapshot = await storage.readLocalFolder();
         if (snapshot.revision != _revision) {
-          throw const FormatException('ファイルが他のアプリや端末で変更されました');
+          throw const FormatException('フォルダが他のアプリや端末で変更されました');
         }
       } catch (error) {
-        _requireSelection('プロジェクトファイルを読み込めません。保存場所を再指定してください: $error');
+        _requireSelection('プロジェクトフォルダを読み込めません。保存場所を再指定してください: $error');
       }
     });
     return _io;
@@ -237,8 +254,8 @@ class ProjectSyncController extends ChangeNotifier {
     try {
       await persistence.flush();
       await _io;
-      if (storage.supportsLocalFile) {
-        await storage.disconnect(ProjectTarget.localFile);
+      if (storage.supportsLocalFolder) {
+        await storage.disconnect(ProjectTarget.localFolder);
       }
       _revision = null;
       _name = null;

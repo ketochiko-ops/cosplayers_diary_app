@@ -1,5 +1,6 @@
 import 'package:cosplayers_diary/core/database/project_storage.dart';
 import 'package:cosplayers_diary/core/database/settings_store.dart';
+import 'package:cosplayers_diary/core/services/memory_file_store.dart';
 
 class MemorySettingsStore implements SettingsStore {
   final values = <String, String>{};
@@ -12,6 +13,16 @@ class MemorySettingsStore implements SettingsStore {
 }
 
 class FakeProjectStorage implements ProjectStorage {
+  @override
+  final assets = MemoryFileStore();
+  bool failAssets = false;
+  int assetLoads = 0;
+  @override
+  Future<void> loadAssets() async {
+    assetLoads++;
+    if (failAssets) throw StateError('missing image');
+  }
+
   String? content;
   String? revision;
   int writes = 0;
@@ -27,9 +38,9 @@ class FakeProjectStorage implements ProjectStorage {
     name: 'project.json',
   );
   @override
-  bool get supportsLocalFile => supported;
+  bool get supportsLocalFolder => supported;
   @override
-  Future<ProjectSnapshot?> createLocalFile(String value) async {
+  Future<ProjectSnapshot?> createLocalFolder(String value) async {
     if (cancel) return null;
     content = value;
     revision = value;
@@ -38,9 +49,9 @@ class FakeProjectStorage implements ProjectStorage {
   }
 
   @override
-  Future<ProjectSnapshot?> openLocalFile() async => cancel ? null : snapshot;
+  Future<ProjectSnapshot?> openLocalFolder() async => cancel ? null : snapshot;
   @override
-  Future<ProjectSnapshot?> reconnectLocalFile({
+  Future<ProjectSnapshot?> reconnectLocalFolder({
     bool requestPermission = false,
   }) async {
     if (!permission && !requestPermission) throw StateError('permission');
@@ -49,7 +60,7 @@ class FakeProjectStorage implements ProjectStorage {
   }
 
   @override
-  Future<ProjectSnapshot> readLocalFile() async {
+  Future<ProjectSnapshot> readLocalFolder() async {
     reads++;
     if (!available) throw StateError('missing');
     return snapshot;

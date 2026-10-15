@@ -75,7 +75,7 @@ Presentation
       └─ AppStatePersistenceが250msデバウンス
           → 全ストアをJSON化
           → SettingsStore(key='app_state_v1')へ保存
-          → 指定ファイルモードで接続中のJSONファイルへ保存
+          → フォルダ保存モードで接続中のJSON・imagesへ保存
 ```
 
 アプリ起動時は逆方向に、JSONを読み、3ストアが保持する公開Listを `clear` + `addAll` で復元します。`AppShell.dispose()` は保留中タイマーを止めた後、最終状態を保存します。
@@ -92,13 +92,13 @@ Webとネイティブは同じJSONプロジェクト形式を使用します。�
 
 ### PWAプロジェクト保存
 
-`ProjectSyncController` が保存モード、外部保存先、前回のrevisionを保持します。PWAの初回（モード未指定時）は `ProjectSetup` の必須ダイアログで指定ファイルモードかブラウザ保存モードを選びます。指定ファイルモードでは作成/読み込みが成功するまで編集不可です。Safariなど非対応ブラウザにはブラウザ保存モードを提供します。異なるファイル内容を読み込んだ場合は以前のプロジェクトの編集routeを閉じます。ネイティブのSQLite保存方式は変更しません。
+`ProjectSyncController` が保存モード、外部保存先、前回のrevisionを保持します。PWAの初回（モード未指定時）は `ProjectSetup` の必須ダイアログでフォルダ保存モードかブラウザ保存モードを選びます。フォルダ保存モードでは作成/読み込みが成功するまで編集不可です。Safariなど非対応ブラウザにはブラウザ保存モードを提供します。異なるファイル内容を読み込んだ場合は以前のプロジェクトの編集routeを閉じます。ネイティブのSQLite保存方式は変更しません。
 
-`AppStatePersistence.onSaved` が指定ファイルへ同じJSONを書きます。保存失敗時はキャッシュを保持して `requiresSelection` に移行し、AppShellが編集中のrouteの上にも閉じられないダイアログを表示します。5秒周期とアプリ復帰時にファイルの読み込み・権限・revisionを確認し、失敗を検出した場合も再指定を求めます。監視と書き込みは直列化します。
+`AppStatePersistence.onSaved` が指定フォルダへ画像を先に、同じJSONを後に書きます。保存失敗時はキャッシュを保持して `requiresSelection` に移行し、AppShellが編集中のrouteの上にも閉じられないダイアログを表示します。5秒周期とアプリ復帰時にフォルダ、JSON、参照画像の存在・権限・revisionを確認し、失敗を検出した場合も再指定を求めます。監視と書き込みは直列化します。
 
-Web実装は `web/project_storage.js` と `project_storage_web.dart` のJS interopです。File System Access APIのhandleをIndexedDBへ保存し、トランザクション完了まで待ちます。起動時に許可済みでキャッシュと同じ内容の場合のみ再接続します。許可要求は利用者のボタン操作で行います。保存先選択前に旧保存処理を排出し、JSONを一時ストアで検証後、端末側/ファイル側のどちらを使うか確認します。書き込み直前に内容一致を確認しますが、他アプリとの完全に原子的な競合防止ではありません。
+Web実装は `web/project_storage.js` と `project_storage_web.dart` のJS interopです。File System Access APIのdirectory handleをIndexedDBへ保存し、トランザクション完了まで待ちます。起動時に許可済みでキャッシュと同じ内容の場合のみ再接続します。許可要求は利用者のボタン操作で行います。保存先選択前に旧保存処理を排出し、JSONを一時ストアで検証後、端末側/ファイル側のどちらを使うか確認します。書き込み直前に内容一致を確認しますが、他アプリとの完全に原子的な競合防止ではありません。
 
-ブラウザ保存モードでは外部ファイルを読み書きせず、localStorageへ自動保存します。設定画面から手動でJSONの控えをダウンロード・読み込みします。Google Drive連携は削除しています。キャッシュJSONが破損した場合は復旧画面を表示し、保存方法の明示的な再指定が完了するまで通常保存や終了処理で破損データを上書きしません。
+ブラウザ保存モードでは外部フォルダを読み書きせず、JSONをlocalStorage、画像をIndexedDBへ自動保存します。設定画面から手動でJSONの控えをダウンロード・読み込みします。Google Drive連携は削除しています。キャッシュJSONが破損した場合は復旧画面を表示し、保存方法の明示的な再指定が完了するまで通常保存や終了処理で破損データを上書きしません。
 
 ### 任意のGoogleカレンダー同期
 
@@ -128,11 +128,11 @@ Pagesの同一オリジン上の別プロジェクトを保護するため、loc
 
 ## JSON保存と旧ZIP移行
 
-`BackupCoordinator.create()` は `AppStatePersistence.exportJson()` のUTF-8バイト列を返します。圧縮もCSV同梱も行いません。設定画面は `.project.json` を保存します。
+`BackupCoordinator.create()` は非同期で `AppStatePersistence.exportJson()` に画像のBase64を `embeddedImages` として追加し、非圧縮JSONのUTF-8バイト列を返します。自動保存は参照のみ、手動の控えだけ画像同梱です。設定画面は `.project.json` を保存します。
 
 読み込み時は通常JSONを検証します。既存データ移行のためZIPヘッダーを検出した場合のみ `BackupService.inspect()` でCRC/ZIP Slip/サイズ/形式/画像件数を検査し、`data/app_state.json` を取り出します。`BackupService` は旧ZIPの読取専用です。新規ZIPの作成コードはありません。
 
-JSON構造と全レコードの型は一時ストアで検査し、検証が済むまで既存状態を変更しません。保留中の保存を排出後に復元し、キャッシュと指定ファイルへ保存します。写真の画像データはまだ保存対象に含まれません。
+JSON構造と全レコードの型は一時ストアで検査し、検証が済むまで既存状態を変更しません。保留中の保存を排出後に復元し、キャッシュと指定フォルダへ保存します。画像の実体・保存パス・IDの検証後に読み込みます。既存画像IDのデータは上書きせず、失敗前に追加できた未参照画像が残る場合があります。
 
 ## ファイルと画像
 
@@ -140,7 +140,9 @@ JSON構造と全レコードの型は一時ストアで検査し、検証が済�
 
 `PhotoService.replace()` は新ファイルの保存成功後に古い未参照ファイルを削除します。古いファイルの削除失敗は、新しい参照を壊さないため無視します。容量節約時は `PackageImageProcessor` が向きを補正し、長辺が2,048pxを超える場合のみJPEG quality 90へ変換します。
 
-現状、これらのクラスは `AppShell` で生成されず、画面・永続化・バックアップへ接続されていません。
+`AppShell` は `PhotoController` を生成し、日記の画像追加・プレビュー・取り外しへ渡します。Webは `ProjectStorage.assets` のIndexedDBキャッシュ、ネイティブはアプリ専用 `LocalFileStore` を使用します。画像メタデータは `AppStatePersistence.photos` からJSONへ保存します。`PhotoService` のClockは注入可能です。
+
+フォルダ内は `CosplayDiary.project.json` と `images/`。JS境界は画像を先に書き、JSONのrevisionと画像のサイズ/最終変更時刻を確認してからJSONをコミットします。既存の画像はID単位で不変とし、差し替えは新規IDです。旧 `localFile` 設定は初回再指定へ移行し、旧JSONは削除しません。詳細は [`../project-folders.md`](../project-folders.md)。
 
 ## 外部依存の役割
 
@@ -153,7 +155,7 @@ JSON構造と全レコードの型は一時ストアで検査し、検証が済�
 | `image` | 向き補正、縮小、JPEG変換 |
 | `path_provider`, `path` | アプリ領域/安全なパス操作 |
 | `archive` | 旧ZIPのCRC付き検証・展開（読取専用） |
-| `file_picker` | JSONの保存先選択、JSON/旧ZIP読み込み元選択 |
+| `file_picker` | 日記画像の選択、画像同梱JSONの保存、JSON/旧ZIP読み込み |
 | `csv` | 依存宣言はあるが、現行 `CsvService` は独自パーサー/エンコーダー |
 | `share_plus` | 依存宣言はあるが、現行コードでは未使用 |
 

@@ -4,127 +4,239 @@ import test from 'node:test';
 import vm from 'node:vm';
 
 const source = fs.readFileSync('web/project_storage.js', 'utf8');
+const filename = 'CosplayDiary.project.json';
+const stateJson = (photos = [], name = '作品') => JSON.stringify({ genres: [{id:'g',name}], photos });
 function environment(baseURI = 'https://app.example/') {
-  const state = { content: '{}', permission: 'granted', missing: false, cancel: false, requests: 0, writes: 0, stored: null, abortTransaction: false };
-  const handle = {
-    name: 'project.json',
-    queryPermission: async () => state.permission,
-    requestPermission: async () => { state.requests++; return state.permission; },
-    getFile: async () => {
-      if (state.missing) throw new Error('missing file');
-      return { text: async () => state.content };
-    },
-    createWritable: async () => {
-      if (state.missing) throw new Error('missing file');
-      let pending;
-      return { write: async (content) => { pending = content; }, close: async () => { state.content = pending; state.writes++; } };
-    },
-  };
-  const databases = [];
-  const indexedDB = {
-    open: (name) => {
-      databases.push(name);
-      const request = {};
-      request.result = {
-        close() {},
-        transaction() {
-          const transaction = { objectStore() {
-            function operation(result, mutate = () => {}) {
-              const request = {};
-              queueMicrotask(() => {
-                request.result = result;
-                request.onsuccess?.();
-                if (state.abortTransaction) {
-                  transaction.error = new Error('transaction aborted');
-                  transaction.onabort?.();
-                } else {
-                  mutate();
-                  transaction.oncomplete?.();
-                }
-              });
-              return request;
-            }
-            return { get: () => operation(state.stored), put: (value) => operation(undefined, () => { state.stored = value; }), delete: () => operation(undefined, () => { state.stored = null; }) };
-          } };
-          return transaction;
-        },
+  const state = { permission:'granted', requests:0, writes:0, cancel:false, abort:false, missing:false, tick:1 };
+  const stores = {handles:new Map(), assets:new Map()};
+  const databaseNames = [];
+  const notFound = () => Object.assign(new Error('missing'), {name:'NotFoundError'});
+  class FileHandle {
+    kind = 'file';
+    constructor(name) { this.name = name; this.bytes = new Uint8Array(); this.modified = state.tick++; }
+    async getFile() {
+      const file = new File([this.bytes], this.name, {lastModified:this.modified});
+      const read = file.arrayBuffer.bind(file);
+      file.arrayBuffer = () => this.unreadable ? Promise.reject(notFound()) : read();
+      return file;
+    }
+    async createWritable() {
+      let bytes;
+      return {
+        write: async value => { bytes = value instanceof Blob ? new Uint8Array(await value.arrayBuffer()) : new TextEncoder().encode(value); },
+        close: async () => { this.bytes = bytes; this.modified = state.tick++; state.writes++; },
       };
-      queueMicrotask(() => request.onsuccess());
-      return request;
-    },
-  };
-  function picker() {
-    if (state.cancel) throw Object.assign(new Error('cancel'), { name: 'AbortError' });
-    return handle;
+    }
+    edit(text) { this.bytes = new TextEncoder().encode(text); this.modified = state.tick++; }
   }
-  const window = { showSaveFilePicker: async () => picker(), showOpenFilePicker: async () => [picker()] };
-  vm.runInNewContext(source, { window, indexedDB, document: { baseURI }, URL });
-  return { state, databases, storage: window.cosplayProjectStorage };
+  class Directory {
+    kind = 'directory';
+    constructor(name) { this.name=name; this.files=new Map(); this.directories=new Map(); }
+    async queryPermission() { return state.permission; }
+    async requestPermission() { state.requests++; return state.permission; }
+    async *entries() {
+      if(state.missing) throw notFound();
+      yield* this.files.entries(); yield* this.directories.entries();
+    }
+    async getFileHandle(name, {create=false} = {}) {
+      if(state.missing) throw notFound();
+      if(!this.files.has(name) && create) this.files.set(name,new FileHandle(name));
+      if(!this.files.has(name)) throw notFound();
+      return this.files.get(name);
+    }
+    async getDirectoryHandle(name, {create=false} = {}) {
+      if(state.missing) throw notFound();
+      if(!this.directories.has(name) && create) this.directories.set(name,new Directory(name));
+      if(!this.directories.has(name)) throw notFound();
+      return this.directories.get(name);
+    }
+  }
+  const directory = new Directory('MyDiary');
+  const indexedDB = { open(name) {
+    databaseNames.push(name);
+    const request={};
+    request.result={
+      objectStoreNames:{contains:name=>name in stores}, createObjectStore:name=>{stores[name]=new Map();}, close(){},
+      transaction(name) {
+        let pending=0; let completed=false;
+        const mutations=[];
+        const tx={objectStore(){
+          function operation(result, change=()=>{}) {
+            pending++;
+            const request={};
+            queueMicrotask(()=>{ request.result=result; request.onsuccess?.(); mutations.push(change); pending--; finish(); });
+            return request;
+          }
+          return {
+            get:key=>operation(stores[name].get(key)),
+            put:(value,key)=>operation(undefined,()=>stores[name].set(key,value)),
+            delete:key=>operation(undefined,()=>stores[name].delete(key)),
+            getAllKeys:()=>operation([...stores[name].keys()]),
+          };
+        }};
+        function finish() {
+          if(pending || completed) return;
+          completed=true;
+          if(state.abort) { tx.error=new Error('transaction aborted'); tx.onabort?.(); }
+          else { for(const change of mutations) change(); tx.oncomplete?.(); }
+        }
+        queueMicrotask(finish);
+        return tx;
+      },
+    };
+    queueMicrotask(()=>request.onsuccess());
+    return request;
+  }};
+  const window={showDirectoryPicker:async()=>{
+    if(state.cancel) throw Object.assign(new Error('cancel'),{name:'AbortError'});
+    return directory;
+  }};
+  vm.runInNewContext(source,{window,indexedDB,document:{baseURI},URL,Blob,Uint8Array});
+  return {state,stores,directory,databaseNames,api:window.cosplayProjectStorage};
 }
+const photo={id:'photo-1',relativePath:'images/photo-1.png',originalName:'test.png'};
 
-test('creates uncompressed JSON and saves repeated changes to the chosen file', async () => {
-  const { state, storage } = environment();
-  const created = JSON.parse(await storage.createLocalFile('{"diary":[]}'));
-  assert.equal(created.content, state.content);
-  assert.equal(state.stored.name, 'project.json');
-  await storage.writeLocalFile('{"diary":[1]}', created.revision);
-  await storage.writeLocalFile('{"diary":[1,2]}', '{"diary":[1]}');
-  assert.equal(state.content, '{"diary":[1,2]}');
-  assert.equal(state.writes, 3);
+test('creates a project folder containing JSON masters and images directory, without ZIP',async()=>{
+  const {api,directory}=environment();
+  const result=JSON.parse(await api.createLocalFolder(stateJson()));
+  assert.equal(result.name,'MyDiary');
+  assert.equal(JSON.parse(result.content).genres[0].name,'作品');
+  assert.equal(await (await directory.files.get(filename).getFile()).text(),stateJson());
+  assert.ok(directory.directories.has('images'));
+  const saved=JSON.parse(await api.writeLocalFolder(stateJson([],'更新'),result.revision));
+  assert.equal(saved.content,stateJson([],'更新'));
 });
 
-test('startup does not request permission without a user action', async () => {
-  const { state, storage } = environment();
-  await storage.createLocalFile('{}');
-  state.permission = 'prompt';
-  await assert.rejects(storage.reconnectLocalFile(), /再指定/);
-  assert.equal(state.requests, 0);
-  state.permission = 'granted';
-  assert.equal(JSON.parse(await storage.reconnectLocalFile(true)).content, '{}');
+test('saves images before committing their JSON references and reloads them from the folder',async()=>{
+  const {api,directory,stores}=environment();
+  await api.saveAsset(photo.relativePath,new Uint8Array([1,2,3]));
+  const first=JSON.parse(await api.createLocalFolder(stateJson([photo])));
+  assert.deepEqual([...new Uint8Array(await (await directory.directories.get('images').files.get('photo-1.png').getFile()).arrayBuffer())],[1,2,3]);
+  stores.assets.clear();
+  await api.openLocalFolder();
+  await api.loadAssets();
+  assert.deepEqual([...await api.readAsset(photo.relativePath)],[1,2,3]);
+  assert.equal(JSON.parse(await api.readLocalFolder()).revision,first.revision);
 });
 
-test('external changes and deleted files cannot be silently overwritten', async () => {
-  const { state, storage } = environment();
-  await storage.createLocalFile('{}');
-  state.content = 'external';
-  await assert.rejects(storage.writeLocalFile('new', '{}'), /変更/);
-  assert.equal(state.writes, 1);
-  state.missing = true;
-  await assert.rejects(storage.readLocalFile(), /missing/);
-  await assert.rejects(storage.writeLocalFile('new', 'external'), /missing/);
+test('a missing cached image cannot create an incomplete project',async()=>{
+  const {api,directory}=environment();
+  await assert.rejects(api.createLocalFolder(stateJson([photo])),/画像が端末にありません/);
+  assert.equal(directory.files.size,0);
 });
 
-test('picker cancellation is distinct from a file error', async () => {
-  const { state, storage } = environment();
-  state.cancel = true;
-  assert.equal(await storage.createLocalFile('{}'), null);
-  assert.equal(await storage.openLocalFile(), null);
-  state.cancel = false;
-  state.missing = true;
-  await assert.rejects(storage.openLocalFile(), /missing/);
+test('loaded image cache remains readable after the source file disappears',async()=>{
+  const {api,directory,stores}=environment();
+  await api.saveAsset(photo.relativePath,new Uint8Array([1,2,3]));
+  await api.createLocalFolder(stateJson([photo]));
+  stores.assets.clear();
+  await api.loadAssets();
+  const images=directory.directories.get('images');
+  images.files.get('photo-1.png').unreadable=true;
+  images.files.delete('photo-1.png');
+  await assert.rejects(api.readLocalFolder(),/missing/);
+  assert.deepEqual([...await api.readAsset(photo.relativePath)],[1,2,3]);
 });
 
-test('failed IndexedDB commit is not reported as a connected project', async () => {
-  const { state, storage } = environment();
-  state.abortTransaction = true;
-  await assert.rejects(storage.createLocalFile('{}'), /transaction aborted/);
+test('new creation never overwrites a nonempty folder',async()=>{
+  const {api,directory}=environment();
+  (await directory.getFileHandle('unrelated.txt',{create:true})).edit('keep');
+  await assert.rejects(api.createLocalFolder(stateJson()),/空のフォルダ/);
+  assert.equal(await (await directory.files.get('unrelated.txt').getFile()).text(),'keep');
+  assert.equal(directory.files.size,1);
 });
 
-
-test('permission loss is detected even before the next edit', async () => {
-  const { state, storage } = environment();
-  await storage.createLocalFile('{}');
-  state.permission = 'denied';
-  await assert.rejects(storage.readLocalFile(), /権限/);
-  assert.equal(state.requests, 0);
+test('picker cancellation is distinct from folder errors',async()=>{
+  const {api,state}=environment();
+  state.cancel=true;
+  assert.equal(await api.createLocalFolder(stateJson()),null);
+  assert.equal(await api.openLocalFolder(),null);
+  state.cancel=false;
+  await assert.rejects(api.openLocalFolder(),/missing/);
 });
 
-test('file handles are isolated by Pages project while production keeps its database', async () => {
-  const production = environment();
-  const preview = environment('https://user.github.io/cosplayers_diary_app/');
-  const sibling = environment('https://user.github.io/another-project/');
-  for (const env of [production, preview, sibling]) await env.storage.createLocalFile('{}');
-  assert.equal(production.databases[0], 'cosplay-diary-project');
-  assert.equal(preview.databases[0], 'cosplay-diary-project:/cosplayers_diary_app/');
-  assert.notEqual(preview.databases[0], sibling.databases[0]);
+test('reconnect never requests permission without an explicit button action',async()=>{
+  const {api,state}=environment();
+  await api.createLocalFolder(stateJson());
+  state.permission='prompt';
+  await assert.rejects(api.reconnectLocalFolder(),/再指定/);
+  assert.equal(state.requests,0);
+  await assert.rejects(api.reconnectLocalFolder(true),/再指定/);
+  assert.equal(state.requests,1);
+  state.permission='granted';
+  assert.ok(await api.reconnectLocalFolder());
+});
+
+test('external JSON changes are detected before any overwrite',async()=>{
+  const {api,directory,state}=environment();
+  const first=JSON.parse(await api.createLocalFolder(stateJson()));
+  directory.files.get(filename).edit(stateJson([],'外部変更'));
+  const writes=state.writes;
+  await assert.rejects(api.writeLocalFolder(stateJson([],'端末'),first.revision),/別の場所/);
+  assert.equal(state.writes,writes);
+  assert.equal(JSON.parse(JSON.parse(await api.readLocalFolder()).content).genres[0].name,'外部変更');
+});
+
+test('removed JSON is not recreated silently by autosave',async()=>{
+  const {api,directory}=environment();
+  const first=JSON.parse(await api.createLocalFolder(stateJson()));
+  directory.files.delete(filename);
+  await assert.rejects(api.writeLocalFolder(stateJson(),first.revision),/missing/);
+  assert.equal(directory.files.has(filename),false);
+});
+
+test('missing images and revoked folder permission are detected before another edit',async()=>{
+  const {api,directory,state}=environment();
+  await api.saveAsset(photo.relativePath,new Uint8Array([1]));
+  await api.createLocalFolder(stateJson([photo]));
+  const images=directory.directories.get('images');
+  images.files.delete('photo-1.png');
+  await assert.rejects(api.readLocalFolder(),/missing/);
+  state.permission='denied';
+  await assert.rejects(api.readLocalFolder(),/再指定/);
+});
+
+test('external image changes alter the revision and block stale JSON saves',async()=>{
+  const {api,directory}=environment();
+  await api.saveAsset(photo.relativePath,new Uint8Array([1]));
+  const first=JSON.parse(await api.createLocalFolder(stateJson([photo])));
+  directory.directories.get('images').files.get('photo-1.png').edit('changed');
+  await assert.rejects(api.writeLocalFolder(stateJson([photo]),first.revision),/別の場所/);
+});
+
+test('malicious image paths cannot escape the project folder',async()=>{
+  const {api,directory}=environment();
+  await assert.rejects(api.saveAsset('../secret.png',new Uint8Array([1])),/パス/);
+  await assert.rejects(api.createLocalFolder(stateJson([{...photo,relativePath:'images/../secret.png'}])),/パス/);
+  assert.equal(directory.files.size,0);
+});
+
+test('immutable cached images cannot be replaced under an existing ID',async()=>{
+  const {api}=environment();
+  await api.saveAsset(photo.relativePath,new Uint8Array([1]));
+  await assert.rejects(api.saveAsset(photo.relativePath,new Uint8Array([2])),/上書き/);
+  assert.deepEqual([...await api.readAsset(photo.relativePath)],[1]);
+});
+
+test('aborted handle transaction is not reported as a connected folder',async()=>{
+  const {api,state,stores}=environment();
+  state.abort=true;
+  await assert.rejects(api.createLocalFolder(stateJson()),/transaction aborted/);
+  assert.equal(stores.handles.has('projectFolder'),false);
+});
+
+test('Pages projects keep separate folder handles and image caches',async()=>{
+  const a=environment();
+  const b=environment('https://user.github.io/repo/');
+  const c=environment('https://user.github.io/another/');
+  for(const env of[a,b,c]) await env.api.saveAsset(photo.relativePath,new Uint8Array([1]));
+  assert.equal(a.databaseNames[0],'cosplay-diary-project');
+  assert.equal(b.databaseNames[0],'cosplay-diary-project:/repo/');
+  assert.notEqual(b.databaseNames[0],c.databaseNames[0]);
+});
+
+test('browser fallback remains usable without a directory picker',()=>{
+  const window={};
+  vm.runInNewContext(source,{window,document:{baseURI:'https://app.example/'},URL,Blob,Uint8Array});
+  assert.equal(window.cosplayProjectStorage.supportsLocalFolder,false);
 });

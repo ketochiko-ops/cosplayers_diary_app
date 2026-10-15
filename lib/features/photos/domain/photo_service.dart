@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import '../../../core/services/file_store.dart';
+import '../../../core/services/clock.dart';
 
 enum PhotoSaveMode { original, spaceSaving }
 
@@ -32,9 +33,14 @@ class PassthroughImageProcessor implements ImageProcessor {
 }
 
 class PhotoService {
-  PhotoService({required this.fileStore, required this.processor});
+  PhotoService({
+    required this.fileStore,
+    required this.processor,
+    this.clock = const SystemClock(),
+  });
   final FileStore fileStore;
   final ImageProcessor processor;
+  final Clock clock;
   int _sequence = 0;
 
   Future<PhotoRecord> replace({
@@ -45,11 +51,14 @@ class PhotoService {
     String? oldRelativePath,
     required bool oldIsReferenced,
   }) async {
-    final id = 'photo-${DateTime.now().microsecondsSinceEpoch}-${_sequence++}';
+    final id = 'photo-${clock.now().microsecondsSinceEpoch}-${_sequence++}';
     final encoded = mode == PhotoSaveMode.original
         ? bytes
         : await processor.resizeForStorage(bytes, maxLongEdge: 2048);
-    final extension = _safeExtension(originalName);
+    final extension =
+        encoded.length > 2 && encoded[0] == 0xff && encoded[1] == 0xd8
+        ? 'jpg'
+        : _safeExtension(originalName);
     final relativePath = 'images/$id.$extension';
     await fileStore.save(relativePath, encoded);
     if (oldRelativePath != null && !oldIsReferenced) {

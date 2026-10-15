@@ -44,7 +44,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      final create = find.text('保存場所を指定してプロジェクトを作成');
+      final create = find.text('空のフォルダを指定してプロジェクトを作成');
       await tester.ensureVisible(create);
       await tester.tap(create);
       await tester.pumpAndSettle();
@@ -68,7 +68,7 @@ void main() {
       CosplayDiaryApp(settingsStore: settings, projectStorage: storage),
     );
     await tester.pumpAndSettle();
-    final create = find.text('保存場所を指定してプロジェクトを作成');
+    final create = find.text('空のフォルダを指定してプロジェクトを作成');
     await tester.ensureVisible(create);
     await tester.tap(create);
     await tester.pumpAndSettle();
@@ -106,7 +106,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    final create = find.text('保存場所を指定してプロジェクトを作成');
+    final create = find.text('空のフォルダを指定してプロジェクトを作成');
     await tester.ensureVisible(create);
     await tester.tap(create);
     await tester.pumpAndSettle();
@@ -124,11 +124,11 @@ void main() {
     );
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
-    final open = find.text('既存のプロジェクトファイルを指定');
+    final open = find.text('既存のプロジェクトフォルダを開く');
     await tester.ensureVisible(open);
     await tester.tap(open);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('ファイルの内容を読み込む'));
+    await tester.tap(find.text('フォルダの内容を読み込む'));
     await tester.pumpAndSettle();
     expect(find.text('前のプロジェクトの編集'), findsNothing);
     expect(find.text('プロジェクトの保存方法'), findsNothing);
@@ -168,15 +168,15 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('設定'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('保存モード・プロジェクトファイルを変更'));
+    await tester.tap(find.text('保存モード・プロジェクトフォルダを変更'));
     await tester.pumpAndSettle();
     expect(find.text('プロジェクトの保存方法'), findsOneWidget);
-    final create = find.text('保存場所を指定してプロジェクトを作成');
+    final create = find.text('空のフォルダを指定してプロジェクトを作成');
     await tester.ensureVisible(create);
     await tester.tap(create);
     await tester.pumpAndSettle();
-    expect(find.textContaining('指定ファイルへ自動保存:'), findsOneWidget);
-    await tester.tap(find.text('保存モード・プロジェクトファイルを変更'));
+    expect(find.textContaining('指定フォルダへ自動保存:'), findsOneWidget);
+    await tester.tap(find.text('保存モード・プロジェクトフォルダを変更'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('ブラウザ保存モードで開始'));
     await tester.tap(find.text('ブラウザ保存モードで開始'));

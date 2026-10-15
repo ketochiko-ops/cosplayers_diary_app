@@ -96,7 +96,7 @@ void main() {
       diary: diaries,
       lenses: lenses,
     );
-    final json = BackupCoordinator(first).create();
+    final json = await BackupCoordinator(first).create();
     await firstDb.close();
 
     final secondDb = await AppDatabase.open(

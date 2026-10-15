@@ -79,7 +79,7 @@ DiaryEntry ── Genre / CosplayCharacter / Costume / PhotoRecord / LensInvento
 
 ファイル: `features/photos/domain/photo_service.dart`
 
-`PhotoRecord` はID、相対パス、元ファイル名を持ちます。保存モードは `original` と `spaceSaving` です。
+`PhotoRecord` はID、相対パス、元ファイル名を持ち、JSONの `photos` に永続化します。日記フォームの画像ピッカー・プレビューと接続しています。保存モードは `original` と `spaceSaving` です。
 
 不変条件:
 
@@ -118,7 +118,7 @@ DiaryEntry ── Genre / CosplayCharacter / Costume / PhotoRecord / LensInvento
 
 ## バックアップと設定
 
-- 新規保存は圧縮しないアプリ状態JSON。旧ZIP形式version 1は移行読み込みのみ。
+- フォルダの自動保存は状態JSON＋`images/`。手動の控えは画像もBase64で同梱した非圧縮JSON。旧ZIP形式version 1は移行読み込みのみ。
 - 旧ZIPのmanifestは作成時刻、CSV別データ行数、画像件数を持つ。
 - 展開後合計サイズ上限の既定値は1GiB。
 - 最終バックアップがない、または30日以上経過するとリマインドする。
@@ -131,7 +131,7 @@ DiaryEntry ── Genre / CosplayCharacter / Costume / PhotoRecord / LensInvento
 | `app_state_v1` | 3ストア全体のJSON |
 | `last_backup_at` | 控えの保存操作のISO 8601日時（Webはダウンロード開始時点） |
 | `photo_save_mode` | `original` または `spaceSaving` |
-| `project_target_v1` | PWA保存モード `localFile` または `browser`。未設定/旧Drive設定は初回選択。ファイルは権限と内容一致時のみ自動再接続 |
+| `project_target_v1` | PWA保存モード `localFolder` または `browser`。未設定/旧Drive/旧 `localFile` は初回再指定。フォルダは権限・JSON一致・参照画像の存在を確認して自動再接続 |
 | `google_calendar_sync_v1` | 自動同期設定、カレンダー別同期履歴、端末共通の日次試行回数・自動実行済み印、未同期表示、最終同期。トークンは含まず、プロジェクトJSONの対象外 |
 
 ## Googleカレンダー同期
@@ -142,3 +142,5 @@ DiaryEntry ── Genre / CosplayCharacter / Costume / PhotoRecord / LensInvento
 - 履歴がある日記だけ削除を伝播する。両側更新や更新と削除の競合は手動選択し、ETag不一致時は停止する。
 - Googleからの日記削除はカラコン使用を解除し、ワンデー在庫を復元する。使用履歴がある日記の日付変更は停止する。
 - 同期試行は接続時・自動・手動・失敗を合算して端末/ブラウザごと10回/日。認証・カレンダー発見/作成・表示切替の通信は別で、APIリクエスト数の上限とは異なる。
+
+プロジェクトJSONは `projectFormat: 2`。旧JSONは形式識別子と `photos` がなくても読めます。画像同梱の控えは追加の `embeddedImages`（相対パス→Base64）を持ち、自動保存時は含めません。画像の保存パスは `images/<英数字・ハイフン・アンダースコア>.<許可拡張子>` に限定し、重複ID/パスを拒否します。

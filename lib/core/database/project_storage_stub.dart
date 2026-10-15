@@ -1,24 +1,29 @@
 import 'project_storage.dart';
+import '../services/memory_file_store.dart';
 
 ProjectStorage createProjectStorage() => _UnsupportedProjectStorage();
 
 class _UnsupportedProjectStorage implements ProjectStorage {
   @override
-  bool get supportsLocalFile => false;
+  final assets = MemoryFileStore();
+  @override
+  Future<void> loadAssets() async {}
+  @override
+  bool get supportsLocalFolder => false;
 
   Future<Never> _unsupported() =>
       Future.error(UnsupportedError('この環境ではプロジェクト連携を利用できません'));
 
   @override
-  Future<ProjectSnapshot?> openLocalFile() => _unsupported();
+  Future<ProjectSnapshot?> openLocalFolder() => _unsupported();
   @override
-  Future<ProjectSnapshot?> createLocalFile(String content) => _unsupported();
+  Future<ProjectSnapshot?> createLocalFolder(String content) => _unsupported();
   @override
-  Future<ProjectSnapshot?> reconnectLocalFile({
+  Future<ProjectSnapshot?> reconnectLocalFolder({
     bool requestPermission = false,
   }) => _unsupported();
   @override
-  Future<ProjectSnapshot> readLocalFile() => _unsupported();
+  Future<ProjectSnapshot> readLocalFolder() => _unsupported();
   @override
   Future<ProjectSnapshot> write(
     ProjectTarget target,

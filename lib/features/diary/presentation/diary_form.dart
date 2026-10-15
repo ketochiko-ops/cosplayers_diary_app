@@ -1,5 +1,12 @@
 import 'package:flutter/material.dart';
 
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
+
+import '../../photos/application/photo_controller.dart';
+import '../../photos/domain/photo_service.dart';
+
 import '../../master_data/application/master_data_store.dart';
 import '../../master_data/domain/master_models.dart';
 import '../../master_data/domain/master_service.dart';
@@ -12,12 +19,14 @@ class DiaryForm extends StatefulWidget {
     required this.masterStore,
     this.initialDate,
     this.entry,
+    this.photos,
     super.key,
   });
   final DiaryStore store;
   final MasterDataStore masterStore;
   final DateTime? initialDate;
   final DiaryEntry? entry;
+  final PhotoController? photos;
 
   @override
   State<DiaryForm> createState() => _DiaryFormState();
@@ -31,6 +40,10 @@ class _DiaryFormState extends State<DiaryForm> {
   String? _genreId;
   String? _characterId;
   String? _costumeId;
+  PhotoRecord? _photo;
+  Future<Uint8List>? _photoBytes;
+  bool _picking = false;
+  late final String _entryId = widget.entry?.id ?? widget.store.nextId();
   late final TextEditingController _memo = TextEditingController(
     text: widget.entry?.memo ?? '',
   );
@@ -45,6 +58,10 @@ class _DiaryFormState extends State<DiaryForm> {
     _genreId = widget.entry?.genreId;
     _characterId = widget.entry?.characterId;
     _costumeId = widget.entry?.costumeId;
+    _photo = widget.photos?.find(widget.entry?.photoId);
+    if (_photo != null) {
+      _photoBytes = widget.photos!.files.read(_photo!.relativePath);
+    }
   }
 
   @override
@@ -146,8 +163,46 @@ class _DiaryFormState extends State<DiaryForm> {
             decoration: const InputDecoration(labelText: 'メモ'),
           ),
           const SizedBox(height: 20),
+          if (widget.photos != null) ...[
+            const Text('写真', style: TextStyle(fontWeight: FontWeight.bold)),
+            if (_photoBytes != null)
+              FutureBuilder<Uint8List>(
+                future: _photoBytes,
+                builder: (context, snapshot) => snapshot.hasError
+                    ? const Text('画像を読み込めません。元のプロジェクトフォルダを開き直してください。')
+                    : snapshot.hasData
+                    ? Image.memory(
+                        snapshot.data!,
+                        height: 220,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, _, _) => const Text('この画像形式を表示できません'),
+                      )
+                    : const LinearProgressIndicator(),
+              ),
+            Wrap(
+              spacing: 8,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _picking ? null : _pickPhoto,
+                  icon: const Icon(Icons.add_photo_alternate),
+                  label: Text(_photo == null ? '画像を追加' : '画像を変更'),
+                ),
+                if (_photo != null)
+                  TextButton(
+                    onPressed: _picking
+                        ? null
+                        : () => setState(() {
+                            _photo = null;
+                            _photoBytes = null;
+                          }),
+                    child: const Text('画像を取り外す'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 20),
+          ],
           FilledButton.icon(
-            onPressed: _save,
+            onPressed: _picking ? null : _save,
             icon: const Icon(Icons.save),
             label: const Text('保存'),
           ),
@@ -182,7 +237,7 @@ class _DiaryFormState extends State<DiaryForm> {
   void _save() {
     final current = widget.entry;
     final entry = DiaryEntry(
-      id: current?.id ?? widget.store.nextId(),
+      id: _entryId,
       activityDate: _date,
       activityType: _type,
       genreId: _genreId,
@@ -190,16 +245,45 @@ class _DiaryFormState extends State<DiaryForm> {
       costumeId: _costumeId,
       memo: _memo.text.trim(),
       calendarTitle: _calendarTitle.text.trim(),
-      photoId: current?.photoId,
+      photoId: widget.photos == null ? current?.photoId : _photo?.id,
       lensInventoryId: current?.lensInventoryId,
       createdAt: current?.createdAt,
     );
     try {
       widget.store.save(entry);
+      if (_photo != null) widget.photos!.retain(_photo!);
       Navigator.pop(context);
     } on ArgumentError catch (error) {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(error.message.toString())));
+    }
+  }
+
+  Future<void> _pickPhoto() async {
+    setState(() => _picking = true);
+    try {
+      final picked = await FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp'],
+      );
+      if (picked == null || !mounted) return;
+      final photo = await widget.photos!.add(
+        await picked.readAsBytes(),
+        picked.name,
+        _entryId,
+      );
+      if (!mounted) return;
+      setState(() {
+        _photo = photo;
+        _photoBytes = widget.photos!.files.read(photo.relativePath);
+      });
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('画像を保存できませんでした: $error')));
+      }
+    } finally {
+      if (mounted) setState(() => _picking = false);
     }
   }
 }

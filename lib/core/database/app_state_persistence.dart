@@ -8,6 +8,7 @@ import '../../features/diary/domain/diary_models.dart';
 import '../../features/master_data/application/master_data_store.dart';
 import '../../features/master_data/domain/master_models.dart';
 import 'settings_store.dart';
+import '../../features/photos/domain/photo_service.dart';
 
 class AppStatePersistence {
   AppStatePersistence({
@@ -21,6 +22,7 @@ class AppStatePersistence {
   final MasterDataStore masters;
   final DiaryStore diary;
   final LensStore lenses;
+  final photos = <PhotoRecord>[];
   Future<void> Function(String source)? onSaved;
   final _savedListeners = <Future<void> Function(String)>[];
   void addSavedListener(Future<void> Function(String) listener) =>
@@ -74,6 +76,15 @@ class AppStatePersistence {
   }
 
   String exportJson() => jsonEncode({
+    'projectFormat': 2,
+    'photos': [
+      for (final photo in photos)
+        {
+          'id': photo.id,
+          'relativePath': photo.relativePath,
+          'originalName': photo.originalName,
+        },
+    ],
     'genres': [
       for (final e in masters.genres)
         {'id': e.id, 'name': e.name, 'memo': e.memo, 'archived': e.archived},
@@ -167,6 +178,10 @@ class AppStatePersistence {
   }
 
   void validateJson(String source) {
+    normalizeJson(source);
+  }
+
+  String normalizeJson(String source) {
     final decoded = jsonDecode(source);
     if (decoded is! Map<String, dynamic> ||
         !const [
@@ -189,6 +204,7 @@ class AppStatePersistence {
     );
     try {
       temporary._restoreJson(source);
+      return temporary.exportJson();
     } finally {
       temporary.masters.dispose();
       temporary.diary.dispose();
@@ -204,6 +220,16 @@ class AppStatePersistence {
 
   void _restoreJson(String source) {
     final value = jsonDecode(source) as Map<String, Object?>;
+    if (value['projectFormat'] != null && value['projectFormat'] != 2) {
+      throw const FormatException('未対応のプロジェクト形式です');
+    }
+    final ids = <String>{};
+    final paths = <String>{};
+    photos
+      ..clear()
+      ..addAll([
+        for (final row in _maps(value['photos'])) _photo(row, ids, paths),
+      ]);
     masters.genres
       ..clear()
       ..addAll([
@@ -319,6 +345,27 @@ class AppStatePersistence {
       (value as List? ?? const []).cast<Map<String, Object?>>();
   DateTime? _date(Object? value) =>
       value == null ? null : DateTime.parse(value as String);
+
+  PhotoRecord _photo(
+    Map<String, Object?> row,
+    Set<String> ids,
+    Set<String> paths,
+  ) {
+    final id = row['id'] as String;
+    final path = row['relativePath'] as String;
+    if (id.isEmpty ||
+        !ids.add(id) ||
+        !paths.add(path) ||
+        !RegExp(r'^images/[a-zA-Z0-9_-]+\.(jpg|jpeg|png|webp|heic)$')
+            .hasMatch(path)) {
+      throw const FormatException('画像のID・保存パスが不正です');
+    }
+    return PhotoRecord(
+      id: id,
+      relativePath: path,
+      originalName: row['originalName'] as String,
+    );
+  }
 
   Future<void> dispose() async {
     _timer?.cancel();
