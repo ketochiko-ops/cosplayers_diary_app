@@ -2,6 +2,7 @@
 
 window.cosplayProjectStorage = (() => {
   const fileName = 'CosplayDiary.project.json';
+  const projectFolderName = 'cosplayers_diary_project';
   const basePath = new URL('.', document.baseURI).pathname;
   const databaseName = basePath === '/' ? 'cosplay-diary-project' : `cosplay-diary-project:${basePath}`;
   let folder = null;
@@ -107,10 +108,13 @@ window.cosplayProjectStorage = (() => {
   }
   async function choose(create, content) {
     try {
-      const selected = await window.showDirectoryPicker({ id: 'cosplay-project', mode: 'readwrite' });
-      await permission(selected, true);
+      const picked = await window.showDirectoryPicker({ id: 'cosplay-project', mode: 'readwrite' });
+      await permission(picked, true);
+      const selected = create && picked.name !== projectFolderName
+        ? await picked.getDirectoryHandle(projectFolderName, { create: true })
+        : picked;
       if (create) {
-        for await (const _ of selected.entries()) throw new Error('新規作成では空のフォルダを指定してください。既存のプロジェクトは「開く」を使ってください。');
+        for await (const _ of selected.entries()) throw new Error('cosplayers_diary_projectが空ではありません。既存のプロジェクトは「開く」を使ってください。');
         const files = await cachedFiles(content);
         await writeImages(selected, files, new Set());
         await writeJson(selected, content); // JSON commits after every image exists.

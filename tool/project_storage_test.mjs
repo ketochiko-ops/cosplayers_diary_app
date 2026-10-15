@@ -51,7 +51,7 @@ function environment(baseURI = 'https://app.example/') {
       return this.directories.get(name);
     }
   }
-  const directory = new Directory('MyDiary');
+  const directory = new Directory('cosplayers_diary_project');
   const indexedDB = { open(name) {
     databaseNames.push(name);
     const request={};
@@ -99,7 +99,7 @@ const photo={id:'photo-1',relativePath:'images/photo-1.png',originalName:'test.p
 test('creates a project folder containing JSON masters and images directory, without ZIP',async()=>{
   const {api,directory}=environment();
   const result=JSON.parse(await api.createLocalFolder(stateJson()));
-  assert.equal(result.name,'MyDiary');
+  assert.equal(result.name,'cosplayers_diary_project');
   assert.equal(JSON.parse(result.content).genres[0].name,'作品');
   assert.equal(await (await directory.files.get(filename).getFile()).text(),stateJson());
   assert.ok(directory.directories.has('images'));
@@ -141,7 +141,7 @@ test('loaded image cache remains readable after the source file disappears',asyn
 test('new creation never overwrites a nonempty folder',async()=>{
   const {api,directory}=environment();
   (await directory.getFileHandle('unrelated.txt',{create:true})).edit('keep');
-  await assert.rejects(api.createLocalFolder(stateJson()),/空のフォルダ/);
+  await assert.rejects(api.createLocalFolder(stateJson()),/空ではありません/);
   assert.equal(await (await directory.files.get('unrelated.txt').getFile()).text(),'keep');
   assert.equal(directory.files.size,1);
 });
@@ -239,4 +239,19 @@ test('browser fallback remains usable without a directory picker',()=>{
   const window={};
   vm.runInNewContext(source,{window,document:{baseURI:'https://app.example/'},URL,Blob,Uint8Array});
   assert.equal(window.cosplayProjectStorage.supportsLocalFolder,false);
+});
+
+
+test('creates the named project inside the chosen location and preserves existing contents',async()=>{
+  const {api,directory}=environment();
+  directory.name='Documents';
+  (await directory.getFileHandle('unrelated.txt',{create:true})).edit('keep');
+  const result=JSON.parse(await api.createLocalFolder(stateJson()));
+  assert.equal(result.name,'cosplayers_diary_project');
+  const project=directory.directories.get('cosplayers_diary_project');
+  assert.equal(await(await project.files.get(filename).getFile()).text(),stateJson());
+  assert.ok(project.directories.has('images'));
+  assert.equal(await(await directory.files.get('unrelated.txt').getFile()).text(),'keep');
+  await assert.rejects(api.createLocalFolder(stateJson([],'別の内容')),/空ではありません/);
+  assert.equal(await(await project.files.get(filename).getFile()).text(),stateJson());
 });

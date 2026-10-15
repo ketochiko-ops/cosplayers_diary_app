@@ -44,7 +44,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      final create = find.text('空のフォルダを指定してプロジェクトを作成');
+      final create = find.text('保存場所を指定してプロジェクトを作成');
       await tester.ensureVisible(create);
       await tester.tap(create);
       await tester.pumpAndSettle();
@@ -68,7 +68,7 @@ void main() {
       CosplayDiaryApp(settingsStore: settings, projectStorage: storage),
     );
     await tester.pumpAndSettle();
-    final create = find.text('空のフォルダを指定してプロジェクトを作成');
+    final create = find.text('保存場所を指定してプロジェクトを作成');
     await tester.ensureVisible(create);
     await tester.tap(create);
     await tester.pumpAndSettle();
@@ -106,7 +106,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    final create = find.text('空のフォルダを指定してプロジェクトを作成');
+    final create = find.text('保存場所を指定してプロジェクトを作成');
     await tester.ensureVisible(create);
     await tester.tap(create);
     await tester.pumpAndSettle();
@@ -171,7 +171,7 @@ void main() {
     await tester.tap(find.text('保存モード・プロジェクトフォルダを変更'));
     await tester.pumpAndSettle();
     expect(find.text('プロジェクトの保存方法'), findsOneWidget);
-    final create = find.text('空のフォルダを指定してプロジェクトを作成');
+    final create = find.text('保存場所を指定してプロジェクトを作成');
     await tester.ensureVisible(create);
     await tester.tap(create);
     await tester.pumpAndSettle();

@@ -44,12 +44,12 @@ class _ProjectSetupState extends State<ProjectSetup> {
             style: TextStyle(fontWeight: FontWeight.bold),
           ),
           const Text(
-            '空のフォルダを指定して作成するか、既存のプロジェクトフォルダを開きます。JSONとマスターを含む登録情報、images内の画像を一緒に管理します。読み込み・保存の失敗を検出すると、すぐにこの画面で保存先の再指定を求めます。',
+            '保存場所を選ぶと、その中にcosplayers_diary_projectフォルダを作成します。同名の空フォルダを直接選ぶこともできます。既存データが入っている場合は「開く」を使ってください。JSONとマスターを含む登録情報、images内の画像を一緒に管理します。読み込み・保存の失敗時は保存先の再指定を求めます。',
           ),
           if (sync.storage.supportsLocalFolder) ...[
             FilledButton(
               onPressed: enabled ? () => _choose(sync.createLocalFolder) : null,
-              child: const Text('空のフォルダを指定してプロジェクトを作成'),
+              child: const Text('保存場所を指定してプロジェクトを作成'),
             ),
             OutlinedButton(
               onPressed: enabled ? () => _choose(sync.openLocalFolder) : null,

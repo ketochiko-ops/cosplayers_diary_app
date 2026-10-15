@@ -142,7 +142,7 @@ JSON構造と全レコードの型は一時ストアで検査し、検証が済�
 
 `AppShell` は `PhotoController` を生成し、日記の画像追加・プレビュー・取り外しへ渡します。Webは `ProjectStorage.assets` のIndexedDBキャッシュ、ネイティブはアプリ専用 `LocalFileStore` を使用します。画像メタデータは `AppStatePersistence.photos` からJSONへ保存します。`PhotoService` のClockは注入可能です。
 
-フォルダ内は `CosplayDiary.project.json` と `images/`。JS境界は画像を先に書き、JSONのrevisionと画像のサイズ/最終変更時刻を確認してからJSONをコミットします。既存の画像はID単位で不変とし、差し替えは新規IDです。旧 `localFile` 設定は初回再指定へ移行し、旧JSONは削除しません。詳細は [`../project-folders.md`](../project-folders.md)。
+新規作成は保存先の親フォルダ内に `cosplayers_diary_project/` を作成します。同名の空フォルダを直接指定することもできます。既存データがある同名フォルダは上書きしません。既存プロジェクトの読み込みは任意のフォルダ名に対応します。フォルダ内は `CosplayDiary.project.json` と `images/`。JS境界は画像を先に書き、JSONのrevisionと画像のサイズ/最終変更時刻を確認してからJSONをコミットします。既存の画像はID単位で不変とし、差し替えは新規IDです。旧 `localFile` 設定は初回再指定へ移行し、旧JSONは削除しません。詳細は [`../project-folders.md`](../project-folders.md)。
 
 ## 外部依存の役割
 

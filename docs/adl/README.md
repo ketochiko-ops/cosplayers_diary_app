@@ -68,7 +68,7 @@ ADL（Agent Documentation Layer）は、Codexなどの実装エージェント�
 
 ## 今回の変更の検証
 
-2026-10-15: Flutterの全102テスト、JSの30テスト（Calendar 8・プロジェクトフォルダ16・Service Worker 5・配信成果物1）、静的解析、Dartフォーマット、actionlintを確認しました。ルート配信とPagesサブパス配信のrelease Webビルド・成果物検証が成功しました。Chromiumで保存モード選択・パス別保存キー・Service Worker scope・オフライン再起動も確認しました。フォルダ選択だけをOPFSの実ディレクトリhandleに差し替えたブラウザ検証で、画像追加・JSON/画像保存・再起動後の再接続・画像欠損時の必須再指定・新フォルダへの復旧・画像同梱JSONの移行を確認しました。ブラウザ保存への移行テストはフォルダAPIを無効にしたChromiumで行い、Safari実機では未確認です。Calendarの認証・通信は偽実装で確認し、OAuth設定済みのPagesでは接続ボタンとGoogle認証画面の表示まで確認済みです。実Googleアカウントへの書き込み、Gemini検索、Safari/Chrome/Edgeの実機認証・OSのフォルダ選択画面は未検証です。設定手順は [`../google-calendar.md`](../google-calendar.md) を参照してください。
+2026-10-15: Flutterの全102テスト、JSの31テスト（Calendar 8・プロジェクトフォルダ17・Service Worker 5・配信成果物1）、静的解析、Dartフォーマット、actionlintを確認しました。ルート配信とPagesサブパス配信のrelease Webビルド・成果物検証が成功しました。Chromiumで保存モード選択・パス別保存キー・Service Worker scope・オフライン再起動も確認しました。フォルダ選択だけをOPFSの実ディレクトリhandleに差し替えたブラウザ検証で、画像追加・JSON/画像保存・再起動後の再接続・画像欠損時の必須再指定・新フォルダへの復旧・画像同梱JSONの移行を確認しました。ブラウザ保存への移行テストはフォルダAPIを無効にしたChromiumで行い、Safari実機では未確認です。Calendarの認証・通信は偽実装で確認し、OAuth設定済みのPagesでは接続ボタンとGoogle認証画面の表示まで確認済みです。実Googleアカウントへの書き込み、Gemini検索、Safari/Chrome/Edgeの実機認証・OSのフォルダ選択画面は未検証です。設定手順は [`../google-calendar.md`](../google-calendar.md) を参照してください。
 
 ## 初回調査時の検証結果
 
