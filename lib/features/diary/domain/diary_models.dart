@@ -7,14 +7,27 @@ enum ActivityType {
   final String label;
 }
 
+class CosplayLook {
+  const CosplayLook({
+    required this.genreId,
+    required this.characterId,
+    required this.costumeId,
+  });
+
+  final String? genreId;
+  final String? characterId;
+  final String? costumeId;
+}
+
 class DiaryEntry {
   DiaryEntry({
     required this.id,
     required this.activityDate,
     required this.activityType,
-    this.genreId,
-    this.characterId,
-    this.costumeId,
+    String? genreId,
+    String? characterId,
+    String? costumeId,
+    List<CosplayLook>? looks,
     this.eventId,
     this.memo = '',
     this.calendarTitle = '',
@@ -22,7 +35,24 @@ class DiaryEntry {
     this.lensInventoryId,
     DateTime? createdAt,
     DateTime? updatedAt,
-  }) : createdAt = createdAt ?? DateTime.now(),
+  }) : looks = List.unmodifiable(
+         looks ??
+             (genreId != null || characterId != null || costumeId != null
+                 ? [
+                     CosplayLook(
+                       genreId: genreId,
+                       characterId: characterId,
+                       costumeId: costumeId,
+                     ),
+                   ]
+                 : const <CosplayLook>[]),
+       ),
+       genreId = looks == null ? genreId : looks.firstOrNull?.genreId,
+       characterId = looks == null
+           ? characterId
+           : looks.firstOrNull?.characterId,
+       costumeId = looks == null ? costumeId : looks.firstOrNull?.costumeId,
+       createdAt = createdAt ?? DateTime.now(),
        updatedAt = updatedAt ?? DateTime.now();
 
   final String id;
@@ -31,6 +61,7 @@ class DiaryEntry {
   final String? genreId;
   final String? characterId;
   final String? costumeId;
+  final List<CosplayLook> looks;
   final String? eventId;
   final String memo;
   final String calendarTitle;
@@ -46,6 +77,7 @@ class DiaryEntry {
     String? genreId,
     String? characterId,
     String? costumeId,
+    List<CosplayLook>? looks,
     String? eventId,
     String? memo,
     String? calendarTitle,
@@ -57,9 +89,18 @@ class DiaryEntry {
     id: id ?? this.id,
     activityDate: activityDate ?? this.activityDate,
     activityType: activityType ?? this.activityType,
-    genreId: genreId ?? this.genreId,
-    characterId: characterId ?? this.characterId,
-    costumeId: costumeId ?? this.costumeId,
+    looks:
+        looks ??
+        (genreId != null || characterId != null || costumeId != null
+            ? [
+                CosplayLook(
+                  genreId: genreId ?? this.genreId,
+                  characterId: characterId ?? this.characterId,
+                  costumeId: costumeId ?? this.costumeId,
+                ),
+                ...this.looks.skip(1),
+              ]
+            : this.looks),
     eventId: eventId ?? this.eventId,
     memo: memo ?? this.memo,
     calendarTitle: calendarTitle ?? this.calendarTitle,

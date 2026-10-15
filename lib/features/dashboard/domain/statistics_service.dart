@@ -88,9 +88,15 @@ class StatisticsService {
       overlapDays: cosplayDates.intersection(photographerDates).length,
       cosplayByMonth: _months(cosplay),
       photographerByMonth: _months(photographers),
-      topCharacters: _ranking(cosplay.map((entry) => entry.characterId)),
-      topGenres: _ranking(cosplay.map((entry) => entry.genreId)),
-      topCostumes: _ranking(cosplay.map((entry) => entry.costumeId)),
+      topCharacters: _ranking(
+        cosplay.expand((entry) => entry.looks).map((look) => look.characterId),
+      ),
+      topGenres: _ranking(
+        cosplay.expand((entry) => entry.looks).map((look) => look.genreId),
+      ),
+      topCostumes: _ranking(
+        cosplay.expand((entry) => entry.looks).map((look) => look.costumeId),
+      ),
       eventParticipationCounts: eventCounts,
       topEvents: _rankCounts(eventCounts),
       lensUsageCount: lensUsageProductIds.length,

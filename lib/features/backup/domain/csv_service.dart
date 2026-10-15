@@ -239,6 +239,13 @@ const csvFileColumns = <String, List<String>>{
     'photo_id',
     'lens_inventory_id',
   ],
+  'diary_looks.csv': [
+    'diary_id',
+    'position',
+    'genre_id',
+    'character_id',
+    'costume_id',
+  ],
   'photos.csv': [
     'id',
     'relative_path',

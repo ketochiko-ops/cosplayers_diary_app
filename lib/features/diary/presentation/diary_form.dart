@@ -44,6 +44,8 @@ class _DiaryFormState extends State<DiaryForm> {
   String? _genreId;
   String? _characterId;
   String? _costumeId;
+  late final List<CosplayLook> _extraLooks =
+      widget.entry?.looks.skip(1).toList() ?? [];
   String? _eventId;
   PhotoRecord? _photo;
   Future<Uint8List>? _photoBytes;
@@ -150,6 +152,7 @@ class _DiaryFormState extends State<DiaryForm> {
               _type = value!;
               if (_type != ActivityType.cosplay) {
                 _genreId = _characterId = _costumeId = null;
+                _extraLooks.clear();
               }
             }),
           ),
@@ -268,6 +271,22 @@ class _DiaryFormState extends State<DiaryForm> {
                   icon: const Icon(Icons.add_circle_outline),
                 ),
               ],
+            ),
+            for (var index = 0; index < _extraLooks.length; index++)
+              _extraLookFields(index),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () => setState(
+                () => _extraLooks.add(
+                  const CosplayLook(
+                    genreId: null,
+                    characterId: null,
+                    costumeId: null,
+                  ),
+                ),
+              ),
+              icon: const Icon(Icons.add),
+              label: const Text('キャラ・衣装を追加'),
             ),
           ],
           const SizedBox(height: 12),
@@ -389,6 +408,208 @@ class _DiaryFormState extends State<DiaryForm> {
     return null;
   }
 
+  Widget _extraLookFields(int index) {
+    final look = _extraLooks[index];
+    final genres = _masters.activeGenres(widget.masterStore.genres).toList();
+    final selectedGenre = _byId(widget.masterStore.genres, look.genreId);
+    if (selectedGenre != null &&
+        !genres.any((value) => value.id == look.genreId)) {
+      genres.add(selectedGenre);
+    }
+    final characters = selectedGenre == null
+        ? <CosplayCharacter>[]
+        : _masters
+              .charactersForGenre(widget.masterStore.characters, selectedGenre)
+              .toList();
+    final selectedCharacter = _byId(
+      widget.masterStore.characters,
+      look.characterId,
+    );
+    if (selectedCharacter != null &&
+        !characters.any((value) => value.id == look.characterId)) {
+      characters.add(selectedCharacter);
+    }
+    final costumes = selectedCharacter == null
+        ? <Costume>[]
+        : _masters
+              .costumesForCharacter(
+                widget.masterStore.costumes,
+                selectedCharacter,
+              )
+              .toList();
+    final selectedCostume = _byId(widget.masterStore.costumes, look.costumeId);
+    if (selectedCostume != null &&
+        !costumes.any((value) => value.id == look.costumeId)) {
+      costumes.add(selectedCostume);
+    }
+    return Card(
+      key: ValueKey('extra-look-$index'),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Expanded(child: Text('${index + 2}件目のキャラ・衣装')),
+                IconButton(
+                  tooltip: '${index + 2}件目を削除',
+                  onPressed: () => setState(() => _extraLooks.removeAt(index)),
+                  icon: const Icon(Icons.delete_outline),
+                ),
+              ],
+            ),
+            _extraSelection(
+              index: index,
+              label: 'ジャンル',
+              value: look.genreId,
+              options: [for (final genre in genres) (genre.id, genre.name)],
+              onChanged: (id) => _setExtraLook(
+                index,
+                CosplayLook(genreId: id, characterId: null, costumeId: null),
+              ),
+              onAdd: () => _addExtraGenre(index),
+            ),
+            _extraSelection(
+              index: index,
+              label: 'キャラクター',
+              value: look.characterId,
+              options: [
+                for (final character in characters)
+                  (character.id, character.name),
+              ],
+              onChanged: selectedGenre == null
+                  ? null
+                  : (id) => _setExtraLook(
+                      index,
+                      CosplayLook(
+                        genreId: look.genreId,
+                        characterId: id,
+                        costumeId: null,
+                      ),
+                    ),
+              onAdd: selectedGenre == null || selectedGenre.archived
+                  ? null
+                  : () => _addExtraCharacter(index, selectedGenre),
+            ),
+            _extraSelection(
+              index: index,
+              label: '衣装',
+              value: look.costumeId,
+              options: [
+                for (final costume in costumes)
+                  (costume.id, costume.displayName),
+              ],
+              onChanged: selectedCharacter == null
+                  ? null
+                  : (id) => _setExtraLook(
+                      index,
+                      CosplayLook(
+                        genreId: look.genreId,
+                        characterId: look.characterId,
+                        costumeId: id,
+                      ),
+                    ),
+              onAdd: selectedCharacter == null || selectedCharacter.archived
+                  ? null
+                  : () => _addExtraCostume(index, selectedCharacter),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _extraSelection({
+    required int index,
+    required String label,
+    required String? value,
+    required List<(String, String)> options,
+    required ValueChanged<String?>? onChanged,
+    required VoidCallback? onAdd,
+  }) => Row(
+    children: [
+      Expanded(
+        child: DropdownButtonFormField<String>(
+          key: ValueKey('extra-$index-$label-$value'),
+          initialValue: value,
+          isExpanded: true,
+          decoration: InputDecoration(labelText: label),
+          items: [
+            if (value != null && !options.any((option) => option.$1 == value))
+              DropdownMenuItem(value: value, child: const Text('取得できませんでした')),
+            for (final option in options)
+              DropdownMenuItem(value: option.$1, child: Text(option.$2)),
+          ],
+          onChanged: onChanged,
+        ),
+      ),
+      IconButton(
+        tooltip: '${index + 2}件目の$labelを追加',
+        onPressed: onAdd,
+        icon: const Icon(Icons.add_circle_outline),
+      ),
+    ],
+  );
+
+  void _setExtraLook(int index, CosplayLook value) =>
+      setState(() => _extraLooks[index] = value);
+
+  Future<void> _addExtraGenre(int index) async {
+    final result = await showQuickAddMasterDialog(
+      context: context,
+      title: 'ジャンルを追加',
+    );
+    if (result == null || !mounted || index >= _extraLooks.length) return;
+    final genre = widget.masterStore.addGenre(result.name);
+    _setExtraLook(
+      index,
+      CosplayLook(genreId: genre.id, characterId: null, costumeId: null),
+    );
+  }
+
+  Future<void> _addExtraCharacter(int index, Genre genre) async {
+    final result = await showQuickAddMasterDialog(
+      context: context,
+      title: 'キャラクターを追加',
+      parentLabel: 'ジャンル: ${genre.name}',
+    );
+    if (result == null || !mounted || index >= _extraLooks.length) return;
+    final character = widget.masterStore.addCharacter(genre.id, result.name);
+    _setExtraLook(
+      index,
+      CosplayLook(
+        genreId: genre.id,
+        characterId: character.id,
+        costumeId: null,
+      ),
+    );
+  }
+
+  Future<void> _addExtraCostume(int index, CosplayCharacter character) async {
+    final result = await showQuickAddMasterDialog(
+      context: context,
+      title: '衣装を追加',
+      parentLabel: 'キャラクター: ${character.name}',
+      allowGeneral: true,
+    );
+    if (result == null || !mounted || index >= _extraLooks.length) return;
+    final costume = widget.masterStore.addCostume(
+      result.name,
+      isGeneral: result.isGeneral,
+      genreIds: [character.genreId],
+      characterIds: result.isGeneral ? const [] : [character.id],
+    );
+    final look = _extraLooks[index];
+    _setExtraLook(
+      index,
+      CosplayLook(
+        genreId: look.genreId,
+        characterId: look.characterId,
+        costumeId: costume.id,
+      ),
+    );
+  }
+
   Future<void> _addGenre() async {
     final result = await showQuickAddMasterDialog(
       context: context,
@@ -470,6 +691,16 @@ class _DiaryFormState extends State<DiaryForm> {
       genreId: _genreId,
       characterId: _characterId,
       costumeId: _costumeId,
+      looks: _type == ActivityType.cosplay
+          ? [
+              CosplayLook(
+                genreId: _genreId,
+                characterId: _characterId,
+                costumeId: _costumeId,
+              ),
+              ..._extraLooks,
+            ]
+          : const [],
       eventId: _eventId,
       memo: _memo.text.trim(),
       calendarTitle: _calendarTitle.text.trim(),

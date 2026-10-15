@@ -76,8 +76,8 @@ void main() {
       final eighth = tester.getTopLeft(
         find.byKey(ValueKey(DateTime(2025, 12, 8))),
       );
-      expect(eighth.dy - first.dy, 44);
-      expect(tester.getTopLeft(find.text('日付を選択してください')).dy, lessThan(350));
+      expect(eighth.dy - first.dy, 52);
+      expect(tester.getTopLeft(find.text('日付を選択してください')).dy, lessThan(370));
       await tester.tap(find.byKey(ValueKey(DateTime(2025, 12, 31))));
       await tester.pumpAndSettle();
       expect(find.text('この日に日記を追加'), findsOneWidget);
@@ -211,6 +211,62 @@ void main() {
   );
 
   testWidgets(
+    'calendar day and diary details show every character and costume',
+    (tester) async {
+      final masters = MasterDataStore();
+      final genre = masters.addGenre('作品');
+      final first = masters.addCharacter(genre.id, 'キャラA');
+      final second = masters.addCharacter(genre.id, 'キャラB');
+      final dress = masters.addCostume('制服', isGeneral: true);
+      final casual = masters.addCostume('私服', isGeneral: true);
+      final diary = DiaryStore()
+        ..save(
+          DiaryEntry(
+            id: 'multi',
+            activityDate: DateTime(2026, 10, 15),
+            activityType: ActivityType.cosplay,
+            calendarTitle: '撮影会',
+            looks: [
+              CosplayLook(
+                genreId: genre.id,
+                characterId: first.id,
+                costumeId: dress.id,
+              ),
+              CosplayLook(
+                genreId: genre.id,
+                characterId: second.id,
+                costumeId: casual.id,
+              ),
+            ],
+          ),
+        );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CalendarPage(
+              store: diary,
+              masterStore: masters,
+              initialMonth: DateTime(2026, 10),
+            ),
+          ),
+        ),
+      );
+      expect(find.text('撮影会'), findsOneWidget);
+      expect(find.text('キャラA・キャラB'), findsOneWidget);
+      await tester.tap(find.byKey(ValueKey(DateTime(2026, 10, 15))));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('キャラ: キャラA'), findsOneWidget);
+      expect(find.textContaining('キャラ: キャラB'), findsOneWidget);
+      expect(find.textContaining('衣装: 私服'), findsOneWidget);
+      masters.archiveCostume(casual.id);
+      masters.deleteArchivedCostume(casual.id);
+      await tester.pump();
+      expect(find.textContaining('取得できませんでした'), findsWidgets);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'six-week calendar scrolls on a short phone with larger text and activity badges',
     (tester) async {
       tester.view.physicalSize = const Size(390, 300);
@@ -247,6 +303,8 @@ void main() {
         find.byKey(ValueKey(DateTime(2026, 3, 31))),
         100,
       );
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -80));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(ValueKey(DateTime(2026, 3, 31))));
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(find.text('月末のイベント'), 100);

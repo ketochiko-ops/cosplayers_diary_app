@@ -41,11 +41,11 @@ DiaryEntry ── ParticipationEvent / Genre / CosplayCharacter / Costume / Phot
 
 ファイル: `features/diary/domain/`
 
-`ActivityType` は `cosplay`、`photographer`、`other` の3種です。`DiaryEntry` は活動日、種別、任意の参加イベント参照 `eventId`、その他の任意参照、メモ、個別の予定名 `calendarTitle`、作成/更新日時を持ちます。`calendarTitle` はJSONに保存し、古いJSONでは空文字です。空なら連携時に参加イベント名を優先し、未選択なら種別・作品・キャラクター・衣装から予定名を生成します。CSV定義には `events.csv` と日記の `event_id` を追加しました。予定名の移行にはJSONを使います。
+`ActivityType` は `cosplay`、`photographer`、`other` の3種です。`DiaryEntry` は活動日、種別、複数の `CosplayLook`（ジャンル・キャラクター・衣装の組）、任意の参加イベント参照 `eventId`、メモ、個別の予定名 `calendarTitle`、作成/更新日時を持ちます。旧 `genreId`/`characterId`/`costumeId` は先頭の組として読み込み、新しいJSONでは `looks` に全組と旧互換用の先頭IDを保存します。`calendarTitle` が空なら連携時に参加イベント名を優先し、未選択なら種別・作品・全キャラクター・全衣装から予定名を生成します。CSV定義には複数組の `diary_looks.csv` を追加しました。CSVの画面接続は未実装です。
 
 不変条件:
 
-- `cosplay` の保存には `genreId`、`characterId`、`costumeId` がすべて必要。
+- `cosplay` の保存には少なくとも1組の `CosplayLook` が必要で、各組の `genreId`、`characterId`、`costumeId` はすべて必須。
 - その他の種別ではそれらは不要。フォームで種別を変更すると参照をクリアする。
 - 同じ日付に複数件を保存できる。
 - 参加回数は同じ `eventId` と活動日の組を1回として数える。活動種別が違っても同日なら重複しない。マスター未選択の自由入力名は集計しない。
@@ -102,7 +102,7 @@ DiaryEntry ── ParticipationEvent / Genre / CosplayCharacter / Costume / Phot
 - 回数とユニーク活動日数を別々に数える。
 - 同日活動は、コスプレとカメラマンの両方が存在する日数。
 - 月別は1〜12月を常に返す。
-- ジャンル/キャラクター/衣装ランキングは件数降順、同数ならID昇順、上位5件。
+- ジャンル/キャラクター/衣装ランキングは日記内の全組から集計し、件数降順、同数ならID昇順、上位5件。活動回数は日記件数で数える。
 - 参加イベントは `eventId` と活動日の組を重複排除して数え、年別/全期間の回数と上位5件を返す。
 - カラコン利用製品ID、未使用在庫、期限間近件数は呼び出し側から渡す。
 

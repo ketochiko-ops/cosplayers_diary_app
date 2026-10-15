@@ -23,6 +23,19 @@ void main() {
     expect(service.validate(entry), isEmpty);
   });
 
+  test('each look must include a genre character and costume', () {
+    final entry = DiaryEntry(
+      id: 'multi',
+      activityDate: DateTime(2026, 2, 1),
+      activityType: ActivityType.cosplay,
+      looks: const [
+        CosplayLook(genreId: 'g', characterId: 'c', costumeId: 's'),
+        CosplayLook(genreId: 'g', characterId: 'c2', costumeId: null),
+      ],
+    );
+    expect(service.validate(entry), ['2件目の衣装']);
+  });
+
   test('entries on the same date are all returned', () {
     final entries = [
       DiaryEntry(
@@ -57,9 +70,10 @@ void main() {
         id: 'd1',
         activityDate: DateTime(2026, 2, 1),
         activityType: ActivityType.cosplay,
-        genreId: 'g',
-        characterId: 'c',
-        costumeId: 's',
+        looks: const [
+          CosplayLook(genreId: 'g', characterId: 'c', costumeId: 's'),
+          CosplayLook(genreId: 'g', characterId: 'c2', costumeId: 's2'),
+        ],
         lensInventoryId: 'i1',
       );
       final copy = service.duplicate(
@@ -70,6 +84,7 @@ void main() {
       expect(copy.id, 'd2');
       expect(copy.lensInventoryId, isNull);
       expect(copy.characterId, 'c');
+      expect(copy.looks.map((look) => look.characterId), ['c', 'c2']);
     },
   );
 }

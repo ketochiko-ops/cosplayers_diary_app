@@ -8,23 +8,23 @@ import 'diary_form.dart';
 import 'confirm_diary_deletion.dart';
 import '../../photos/application/photo_controller.dart';
 
-String _characterLabel(DiaryEntry entry, MasterDataStore masters) =>
+String _characterLabel(CosplayLook look, MasterDataStore masters) =>
     masters.characters
-        .where((value) => value.id == entry.characterId)
+        .where((value) => value.id == look.characterId)
         .firstOrNull
         ?.name ??
     '取得できませんでした';
 
-String _costumeLabel(DiaryEntry entry, MasterDataStore masters) =>
+String _costumeLabel(CosplayLook look, MasterDataStore masters) =>
     masters.costumes
-        .where((value) => value.id == entry.costumeId)
+        .where((value) => value.id == look.costumeId)
         .firstOrNull
         ?.displayName ??
     '取得できませんでした';
 
-String _genreLabel(DiaryEntry entry, MasterDataStore masters) =>
+String _genreLabel(CosplayLook look, MasterDataStore masters) =>
     masters.genres
-        .where((value) => value.id == entry.genreId)
+        .where((value) => value.id == look.genreId)
         .firstOrNull
         ?.name ??
     '取得できませんでした';
@@ -40,16 +40,25 @@ bool _hasMissingMaster(DiaryEntry entry, MasterDataStore masters) =>
     (entry.eventId != null &&
         !masters.events.any((value) => value.id == entry.eventId)) ||
     (entry.activityType == ActivityType.cosplay &&
-        (!masters.genres.any((value) => value.id == entry.genreId) ||
-            !masters.characters.any((value) => value.id == entry.characterId) ||
-            !masters.costumes.any((value) => value.id == entry.costumeId)));
+        (entry.looks.isEmpty ||
+            entry.looks.any(
+              (look) =>
+                  !masters.genres.any((value) => value.id == look.genreId) ||
+                  !masters.characters.any(
+                    (value) => value.id == look.characterId,
+                  ) ||
+                  !masters.costumes.any((value) => value.id == look.costumeId),
+            )));
+
+String _characterNames(DiaryEntry entry, MasterDataStore masters) =>
+    entry.looks.map((look) => _characterLabel(look, masters)).join('・');
 
 String _dayPreview(DiaryEntry entry, MasterDataStore masters) {
   final title = entry.calendarTitle.trim();
   if (title.isNotEmpty) return title;
   if (entry.eventId != null) return _eventLabel(entry, masters);
   if (entry.activityType == ActivityType.cosplay) {
-    return _characterLabel(entry, masters);
+    return _characterNames(entry, masters);
   }
   final firstMemoLine = entry.memo.trim().split('\n').first.trim();
   return firstMemoLine.isNotEmpty ? firstMemoLine : entry.activityType.label;
@@ -223,7 +232,7 @@ class _CalendarPageState extends State<CalendarPage> {
           SliverGrid.builder(
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 7,
-              mainAxisExtent: 44 * textScale,
+              mainAxisExtent: 52 * textScale,
             ),
             itemCount: offset + days,
             itemBuilder: (context, index) {
@@ -244,9 +253,15 @@ class _CalendarPageState extends State<CalendarPage> {
               final preview = count == 0
                   ? ''
                   : _dayPreview(dayEntries.first, widget.masterStore);
+              final characterNames = dayEntries
+                  .where((entry) => entry.activityType == ActivityType.cosplay)
+                  .expand((entry) => entry.looks)
+                  .map((look) => _characterLabel(look, widget.masterStore))
+                  .toSet()
+                  .join('・');
               return Semantics(
                 label:
-                    '${date.year}年${date.month}月${date.day}日、活動$count件${hasMissingMaster ? '、参照データを取得できませんでした' : ''}${count == 0 ? '' : '、$preview'}',
+                    '${date.year}年${date.month}月${date.day}日、活動$count件${hasMissingMaster ? '、参照データを取得できませんでした' : ''}${count == 0 ? '' : '、$preview'}${characterNames.isEmpty || characterNames == preview ? '' : '、キャラ: $characterNames'}',
                 selected: DateUtils.isSameDay(_selected, date),
                 child: InkWell(
                   key: ValueKey(date),
@@ -277,10 +292,21 @@ class _CalendarPageState extends State<CalendarPage> {
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 2),
                             child: Text(
-                              '${hasMissingMaster ? '⚠ ' : ''}${count > 1 ? '$count件 $preview' : preview}',
+                              '${hasMissingMaster ? '⚠ ' : ''}${count > 1 ? '$count件 ' : ''}$preview',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(fontSize: 10),
+                            ),
+                          ),
+                        if (characterNames.isNotEmpty &&
+                            characterNames != preview)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 2),
+                            child: Text(
+                              characterNames,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 9),
                             ),
                           ),
                       ],
@@ -378,7 +404,8 @@ class DiaryTile extends StatelessWidget {
       if (entry.calendarTitle.trim().isNotEmpty)
         '${entry.eventId == null ? 'イベント' : '予定名'}: ${entry.calendarTitle.trim()}',
       if (entry.activityType == ActivityType.cosplay)
-        'ジャンル: ${_genreLabel(entry, masterStore)}  /  キャラ: ${_characterLabel(entry, masterStore)}  /  衣装: ${_costumeLabel(entry, masterStore)}',
+        for (final look in entry.looks)
+          'ジャンル: ${_genreLabel(look, masterStore)}  /  キャラ: ${_characterLabel(look, masterStore)}  /  衣装: ${_costumeLabel(look, masterStore)}',
       if (entry.memo.trim().isNotEmpty) 'メモ: ${entry.memo.trim()}',
     ];
     return ListTile(
@@ -397,7 +424,7 @@ class DiaryTile extends StatelessWidget {
           ? null
           : Text(
               details.join('\n'),
-              maxLines: 4,
+              maxLines: 12,
               overflow: TextOverflow.ellipsis,
             ),
       onTap: () => Navigator.push(

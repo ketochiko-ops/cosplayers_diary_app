@@ -9,6 +9,37 @@ import 'package:cosplayers_diary/features/master_data/application/master_data_st
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('multiple looks roundtrip and old single-look JSON still loads', () {
+    final masters = MasterDataStore();
+    final diary = DiaryStore()
+      ..save(
+        DiaryEntry(
+          id: 'multi',
+          activityDate: DateTime(2026, 10, 15),
+          activityType: ActivityType.cosplay,
+          looks: const [
+            CosplayLook(genreId: 'g', characterId: 'a', costumeId: 's1'),
+            CosplayLook(genreId: 'g', characterId: 'b', costumeId: 's2'),
+          ],
+        ),
+      );
+    final persistence = AppStatePersistence(
+      store: _MemorySettingsStore(),
+      masters: masters,
+      diary: diary,
+      lenses: LensStore(),
+    );
+    final json = persistence.exportJson();
+    persistence.restoreJson(json);
+    expect(diary.entries.single.looks.map((look) => look.characterId), [
+      'a',
+      'b',
+    ]);
+    final old = jsonDecode(json) as Map<String, dynamic>;
+    (old['diary'] as List).single.remove('looks');
+    persistence.restoreJson(jsonEncode(old));
+    expect(diary.entries.single.looks.single.characterId, 'a');
+  });
   test(
     'platform-neutral store preserves the native-compatible state JSON',
     () async {

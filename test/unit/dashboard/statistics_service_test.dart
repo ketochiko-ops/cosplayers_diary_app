@@ -83,4 +83,24 @@ void main() {
     expect(current.topEvents.first.id, 'acosta');
     expect(service.calculate(visits).eventParticipationCounts['acosta'], 3);
   });
+
+  test('one diary with two looks contributes both characters and costumes', () {
+    final result = service.calculate([
+      DiaryEntry(
+        id: 'multi',
+        activityDate: DateTime(2026, 10, 15),
+        activityType: ActivityType.cosplay,
+        looks: const [
+          CosplayLook(genreId: 'g', characterId: 'a', costumeId: 'dress-a'),
+          CosplayLook(genreId: 'g', characterId: 'b', costumeId: 'dress-b'),
+        ],
+      ),
+    ]);
+    expect(result.cosplayCount, 1);
+    expect(result.topCharacters.map((value) => value.id).toSet(), {'a', 'b'});
+    expect(result.topCostumes.map((value) => value.id).toSet(), {
+      'dress-a',
+      'dress-b',
+    });
+  });
 }

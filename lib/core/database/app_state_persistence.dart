@@ -129,6 +129,14 @@ class AppStatePersistence {
           'genreId': e.genreId,
           'characterId': e.characterId,
           'costumeId': e.costumeId,
+          'looks': [
+            for (final look in e.looks)
+              {
+                'genreId': look.genreId,
+                'characterId': look.characterId,
+                'costumeId': look.costumeId,
+              },
+          ],
           'eventId': e.eventId,
           'memo': e.memo,
           'calendarTitle': e.calendarTitle,
@@ -311,6 +319,16 @@ class AppStatePersistence {
             genreId: raw['genreId'] as String?,
             characterId: raw['characterId'] as String?,
             costumeId: raw['costumeId'] as String?,
+            looks: raw.containsKey('looks')
+                ? [
+                    for (final look in _maps(raw['looks']))
+                      CosplayLook(
+                        genreId: look['genreId'] as String?,
+                        characterId: look['characterId'] as String?,
+                        costumeId: look['costumeId'] as String?,
+                      ),
+                  ]
+                : null,
             eventId: raw['eventId'] as String?,
             memo: raw['memo'] as String? ?? '',
             calendarTitle: raw['calendarTitle'] as String? ?? '',

@@ -56,9 +56,15 @@ class CalendarCodec {
       throw const FormatException('カレンダーへ送るメモはUTF-8で16KB以内にしてください');
     }
     String name(String key) {
-      final value = (masters[key] as List? ?? const []).firstOrNull;
-      if (value == null) return '未指定';
-      return key == 'costumes' ? _costumeLabel(value) : value['name'] as String;
+      final values = masters[key] as List? ?? const [];
+      if (values.isEmpty) return '未指定';
+      return values
+          .map(
+            (value) => key == 'costumes'
+                ? _costumeLabel(value)
+                : value['name'] as String,
+          )
+          .join('・');
     }
 
     final label = _label(row['activityType'] as String);
@@ -96,9 +102,13 @@ class CalendarCodec {
     final names = <String>[
       for (final key in ['genres', 'characters', 'costumes'])
         if ((masters[key] as List).isNotEmpty)
-          key == 'costumes'
-              ? _costumeLabel((masters[key] as List).first)
-              : (masters[key] as List).first['name'] as String,
+          (masters[key] as List)
+              .map(
+                (value) => key == 'costumes'
+                    ? _costumeLabel(value)
+                    : value['name'] as String,
+              )
+              .join('・'),
     ];
     final label = _label(row['activityType'] as String);
     return '[$label] ${names.isEmpty ? 'コスプレ日記' : names.join(' / ')}';
@@ -164,6 +174,7 @@ class CalendarCodec {
         'genreId': null,
         'characterId': null,
         'costumeId': null,
+        'looks': <dynamic>[],
         'eventId': null,
         'memo': description,
         'calendarTitle': summary,
@@ -220,6 +231,7 @@ class CalendarCodec {
           e.key: e.value,
       'calendarTitle': row['calendarTitle'] ?? '',
       'eventId': row['eventId'],
+      'looks': _looksFor(row),
     },
     'masters': _mastersFor(row, state),
   });
@@ -253,31 +265,60 @@ class CalendarCodec {
   ) {
     List<Map<String, dynamic>> selected(
       String key,
-      String? id,
+      Iterable<String?> ids,
       List<String> fields,
     ) => [
-      for (final raw in state[key] as List? ?? const [])
-        if (raw['id'] == id) {for (final key in fields) key: raw[key]},
+      for (final id in ids.toSet())
+        for (final raw in state[key] as List? ?? const [])
+          if (id != null && raw['id'] == id)
+            {for (final field in fields) field: raw[field]},
     ];
+    final looks = _looksFor(row);
     return {
-      'genres': selected('genres', row['genreId'] as String?, ['id', 'name']),
-      'characters': selected('characters', row['characterId'] as String?, [
-        'id',
-        'name',
-        'genreId',
-      ]),
-      'costumes': selected('costumes', row['costumeId'] as String?, [
-        'id',
-        'name',
-        'isGeneral',
-        'genreId',
-        'genreIds',
-        'characterIds',
-        'characterId',
-        'tags',
-      ]),
-      'events': selected('events', row['eventId'] as String?, ['id', 'name']),
+      'genres': selected(
+        'genres',
+        looks.map((look) => look['genreId'] as String?),
+        ['id', 'name'],
+      ),
+      'characters': selected(
+        'characters',
+        looks.map((look) => look['characterId'] as String?),
+        ['id', 'name', 'genreId'],
+      ),
+      'costumes': selected(
+        'costumes',
+        looks.map((look) => look['costumeId'] as String?),
+        [
+          'id',
+          'name',
+          'isGeneral',
+          'genreId',
+          'genreIds',
+          'characterIds',
+          'characterId',
+          'tags',
+        ],
+      ),
+      'events': selected('events', [row['eventId'] as String?], ['id', 'name']),
     };
+  }
+
+  List<Map<String, dynamic>> _looksFor(Map<String, dynamic> row) {
+    final raw = row['looks'] as List?;
+    if (raw != null) {
+      return [for (final value in raw) Map<String, dynamic>.from(value as Map)];
+    }
+    return row['genreId'] != null ||
+            row['characterId'] != null ||
+            row['costumeId'] != null
+        ? [
+            {
+              'genreId': row['genreId'],
+              'characterId': row['characterId'],
+              'costumeId': row['costumeId'],
+            },
+          ]
+        : [];
   }
 
   void _validateReferences(
@@ -286,22 +327,38 @@ class CalendarCodec {
   ) {
     final type = row['activityType'] as String;
     _label(type);
-    for (final pair in {
-      'genres': 'genreId',
-      'characters': 'characterId',
-      'costumes': 'costumeId',
-      'events': 'eventId',
-    }.entries) {
-      final id = row[pair.value];
-      if (type == 'cosplay' && pair.key != 'events' && id == null) {
-        throw const FormatException('コスプレ日記の関連情報が不足しています');
+    final looks = _looksFor(row);
+    if (type == 'cosplay' && looks.isEmpty) {
+      throw const FormatException('コスプレ日記の関連情報が不足しています');
+    }
+    for (final look in looks) {
+      for (final pair in {
+        'genres': 'genreId',
+        'characters': 'characterId',
+        'costumes': 'costumeId',
+      }.entries) {
+        final id = look[pair.value];
+        if (type == 'cosplay' && id == null) {
+          throw const FormatException('コスプレ日記の関連情報が不足しています');
+        }
+        if (id != null &&
+            !(masters[pair.key] as List? ?? const []).any(
+              (e) => e['id'] == id,
+            )) {
+          throw const FormatException(
+            '取得できませんでした: 日記に関連する参加イベント・作品・キャラクター・衣装を確認してください',
+          );
+        }
       }
-      if (id != null &&
-          !(masters[pair.key] as List? ?? const []).any((e) => e['id'] == id)) {
-        throw const FormatException(
-          '取得できませんでした: 日記に関連する参加イベント・作品・キャラクター・衣装を確認してください',
-        );
-      }
+    }
+    final eventId = row['eventId'];
+    if (eventId != null &&
+        !(masters['events'] as List? ?? const []).any(
+          (e) => e['id'] == eventId,
+        )) {
+      throw const FormatException(
+        '取得できませんでした: 日記に関連する参加イベント・作品・キャラクター・衣装を確認してください',
+      );
     }
   }
 

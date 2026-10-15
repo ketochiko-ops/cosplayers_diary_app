@@ -45,6 +45,7 @@ PWAは初回に指定フォルダ（対応ブラウザ）かブラウザ保存�
 | 参加イベントと回数 | `master_data_store.dart`, `statistics_service.dart` | 日記のeventId、同日重複、マスター一覧/ダッシュボード、JSON、Googleカレンダー |
 | マスター項目/候補 | `master_models.dart`, `master_service.dart` | store、フォーム、JSON、CSV、過去参照 |
 | 日記の項目/検証 | `diary_models.dart`, `diary_service.dart` | DiaryStore、フォーム/一覧、JSON、CSV、統計 |
+| 日記の複数キャラ・衣装 | `CosplayLook`, `diary_form.dart` | カレンダー表示、旧単一IDの読み込み、ランキング、Googleカレンダー、CSV定義 |
 | カラコン在庫/使用 | `lens_service.dart` | 日記との整合性、LensStore、JSON、CSV、統計 |
 | 写真保存 | `photo_service.dart`, `local_file_store.dart` | UI composition、メタデータ永続化、JSONの画像参照 |
 | SQLite | `schema.dart`, `app_database.dart` | version追加、DB結合テスト、JSON正本との関係 |

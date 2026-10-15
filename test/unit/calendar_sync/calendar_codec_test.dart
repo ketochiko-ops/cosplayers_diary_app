@@ -35,6 +35,36 @@ Map<String, dynamic> calendarState() => {
 
 void main() {
   const codec = CalendarCodec();
+  test('multiple looks remain linked through Google Calendar metadata', () {
+    final state = calendarState();
+    (state['characters'] as List).add({
+      'id': 'c2',
+      'genreId': 'g',
+      'name': 'キャラB',
+    });
+    (state['costumes'] as List).add({
+      'id': 's2',
+      'name': '私服',
+      'isGeneral': true,
+    });
+    final row = <String, dynamic>{...(state['diary'] as List).single as Map};
+    state['diary'] = [row];
+    row['looks'] = [
+      {'genreId': 'g', 'characterId': 'c', 'costumeId': 's'},
+      {'genreId': 'g', 'characterId': 'c2', 'costumeId': 's2'},
+    ];
+    final event = codec.encode(row, state);
+    expect(event['description'], contains('キャラA・キャラB'));
+    final remote = codec.decode(event, 'calendar-1');
+    expect(remote.entry['looks'], hasLength(2));
+    expect(remote.masters['characters'], hasLength(2));
+    final empty = calendarState()
+      ..['diary'] = []
+      ..['characters'] = []
+      ..['costumes'] = [];
+    final merged = codec.merge(empty, remote);
+    expect((merged['characters'] as List), hasLength(2));
+  });
   test(
     'event exposes readable Japanese fields and uses exclusive next-day end',
     () {

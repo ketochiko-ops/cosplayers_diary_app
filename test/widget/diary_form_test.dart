@@ -47,7 +47,13 @@ Future<void> addMaster(
   bool general = false,
 }) async {
   final button = find.byTooltip('$kindを追加');
-  await tester.ensureVisible(button);
+  await tester.drag(find.byType(Scrollable).first, const Offset(0, 2000));
+  await tester.pumpAndSettle();
+  await tester.scrollUntilVisible(
+    button,
+    200,
+    scrollable: find.byType(Scrollable).first,
+  );
   await tester.tap(button);
   await tester.pumpAndSettle();
   await tester.enterText(find.byType(TextFormField), name);
@@ -317,6 +323,81 @@ void main() {
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
     expect(diary.entries.single.costumeId, costume.id);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('one diary can save two character and costume combinations', (
+    tester,
+  ) async {
+    final masters = MasterDataStore();
+    final genre = masters.addGenre('作品');
+    final first = masters.addCharacter(genre.id, 'キャラA');
+    final second = masters.addCharacter(genre.id, 'キャラB');
+    final dress = masters.addCostume('制服', isGeneral: true);
+    final casual = masters.addCostume('私服', isGeneral: true);
+    final diary = DiaryStore()
+      ..save(
+        DiaryEntry(
+          id: 'multi',
+          activityDate: DateTime(2026, 10, 15),
+          activityType: ActivityType.cosplay,
+          genreId: genre.id,
+          characterId: first.id,
+          costumeId: dress.id,
+        ),
+      );
+    await openForm(tester, masters, diary, entry: diary.entries.single);
+    await tester.scrollUntilVisible(
+      find.text('キャラ・衣装を追加'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('キャラ・衣装を追加'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('extra-0-ジャンル-null')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('作品').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('extra-0-キャラクター-null')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('キャラB').last);
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('extra-0-衣装-null')),
+      150,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.byKey(const ValueKey('extra-0-衣装-null')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('私服').last);
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('保存'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+    expect(diary.entries.single.looks.map((look) => look.characterId), [
+      first.id,
+      second.id,
+    ]);
+    expect(diary.entries.single.looks.map((look) => look.costumeId), [
+      dress.id,
+      casual.id,
+    ]);
+    await openForm(tester, masters, diary, entry: diary.entries.single);
+    expect(find.text('2件目のキャラ・衣装'), findsOneWidget);
+    await tester.ensureVisible(find.byTooltip('2件目を削除'));
+    await tester.tap(find.byTooltip('2件目を削除'));
+    await tester.scrollUntilVisible(
+      find.text('保存'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+    expect(diary.entries.single.looks, hasLength(1));
     expect(tester.takeException(), isNull);
   });
 }
