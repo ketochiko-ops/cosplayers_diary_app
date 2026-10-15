@@ -82,7 +82,19 @@ class _DiaryFormState extends State<DiaryForm> {
     final character = _byId(characters, _characterId);
     final costumes = character == null
         ? <Costume>[]
-        : _masters.costumesForCharacter(widget.masterStore.costumes, character);
+        : _masters
+              .costumesForCharacter(widget.masterStore.costumes, character)
+              .toList();
+    // A diary keeps its original costume ID even if the master is later
+    // archived or assigned to another character. Keep that historical choice
+    // visible while editing this entry.
+    if (widget.entry?.costumeId == _costumeId &&
+        !costumes.any((value) => value.id == _costumeId)) {
+      final previous = widget.masterStore.costumes
+          .where((value) => value.id == _costumeId)
+          .firstOrNull;
+      if (previous != null) costumes.add(previous);
+    }
     return Scaffold(
       appBar: AppBar(title: Text(widget.entry == null ? '日記を追加' : '日記を編集')),
       body: ListView(

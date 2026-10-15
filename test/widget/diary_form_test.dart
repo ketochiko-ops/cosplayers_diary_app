@@ -199,4 +199,40 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('historical costume remains selected after its scope changes', (
+    tester,
+  ) async {
+    final masters = MasterDataStore();
+    final genre = masters.addGenre('作品');
+    final original = masters.addCharacter(genre.id, '元のキャラ');
+    final other = masters.addCharacter(genre.id, '別のキャラ');
+    final costume = masters.addCostume('勝負服', isGeneral: true);
+    final entry = DiaryEntry(
+      id: 'historical',
+      activityDate: DateTime(2026, 10, 15),
+      activityType: ActivityType.cosplay,
+      genreId: genre.id,
+      characterId: original.id,
+      costumeId: costume.id,
+    );
+    masters.updateCostume(
+      costume.id,
+      name: costume.name,
+      isGeneral: false,
+      characterId: other.id,
+    );
+    final diary = DiaryStore()..save(entry);
+    await openForm(tester, masters, diary, entry: entry);
+    expect(selections(tester), [genre.id, original.id, costume.id]);
+    await tester.scrollUntilVisible(
+      find.text('保存'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+    expect(diary.entries.single.costumeId, costume.id);
+    expect(tester.takeException(), isNull);
+  });
 }

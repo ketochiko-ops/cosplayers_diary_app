@@ -12,7 +12,7 @@ class MasterDataStore extends ChangeNotifier {
       '$prefix-${DateTime.now().microsecondsSinceEpoch}-${_sequence++}';
 
   Genre addGenre(String name, {String memo = ''}) {
-    final value = Genre(id: _id('genre'), name: name.trim(), memo: memo.trim());
+    final value = Genre(id: _id('genre'), name: _name(name), memo: memo.trim());
     genres.add(value);
     notifyListeners();
     return value;
@@ -23,10 +23,11 @@ class MasterDataStore extends ChangeNotifier {
     String name, {
     String memo = '',
   }) {
+    _requireActiveGenre(genreId);
     final value = CosplayCharacter(
       id: _id('character'),
       genreId: genreId,
-      name: name.trim(),
+      name: _name(name),
       memo: memo.trim(),
     );
     characters.add(value);
@@ -40,9 +41,10 @@ class MasterDataStore extends ChangeNotifier {
     String? characterId,
     String memo = '',
   }) {
+    if (!isGeneral) _requireActiveCharacter(characterId);
     final value = Costume(
       id: _id('costume'),
-      name: name.trim(),
+      name: _name(name),
       isGeneral: isGeneral,
       characterId: isGeneral ? null : characterId,
       memo: memo.trim(),
@@ -50,6 +52,54 @@ class MasterDataStore extends ChangeNotifier {
     costumes.add(value);
     notifyListeners();
     return value;
+  }
+
+  void updateGenre(String id, String name) =>
+      _replaceGenre(id, (value) => value.copyWith(name: _name(name)));
+
+  void updateCharacter(String id, String name) =>
+      _replaceCharacter(id, (value) => value.copyWith(name: _name(name)));
+
+  void updateCostume(
+    String id, {
+    required String name,
+    required bool isGeneral,
+    String? characterId,
+  }) {
+    final index = costumes.indexWhere((value) => value.id == id);
+    if (index < 0) throw ArgumentError.value(id, 'id', '衣装が見つかりません');
+    final current = costumes[index];
+    if (!isGeneral &&
+        (characterId != current.characterId || current.isGeneral)) {
+      _requireActiveCharacter(characterId);
+    }
+    costumes[index] = Costume(
+      id: current.id,
+      name: _name(name),
+      isGeneral: isGeneral,
+      characterId: isGeneral ? null : characterId,
+      memo: current.memo,
+      archived: current.archived,
+    );
+    notifyListeners();
+  }
+
+  String _name(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) throw ArgumentError.value(value, 'name', '名前は必須です');
+    return trimmed;
+  }
+
+  void _requireActiveGenre(String id) {
+    if (!genres.any((value) => value.id == id && !value.archived)) {
+      throw ArgumentError.value(id, 'genreId', '有効なジャンルを選択してください');
+    }
+  }
+
+  void _requireActiveCharacter(String? id) {
+    if (!characters.any((value) => value.id == id && !value.archived)) {
+      throw ArgumentError.value(id, 'characterId', '有効なキャラクターを選択してください');
+    }
   }
 
   void archiveGenre(String id) =>
