@@ -107,7 +107,7 @@ flutter build web --release --pwa-strategy=none --base-href /
 ```sh
 node tool/verify_pwa.mjs build/web
 node tool/prepare_vercel_output.mjs build/web
-npx --yes --package vercel@60.1.3 vercel deploy --prebuilt --prod --skip-domain
+npx --yes --package vercel@65.0.0 vercel deploy --prebuilt --prod --skip-domain
 ```
 
 Web版のアプリ状態は同じ `app_state_v1` JSONをブラウザのローカルストレージへ保存します。任意のプロジェクト保存を設定すると、そのJSONを更新のたびに選択した保存先へも書き込みます。ネイティブ版のSQLiteをWebから直接開くことはできないため、ネイティブ版との移行には設定画面のZIPバックアップ作成・復元を使用してください。Safariの「履歴とWebサイトデータを消去」などでブラウザ保存が削除されるため、定期バックアップを推奨します。
