@@ -4,7 +4,7 @@ ADL（Agent Documentation Layer）は、Codexなどの実装エージェント�
 
 ## 調査スナップショット
 
-- 最終更新日: 2026-10-15
+- 最終更新日: 2026-10-22
 - 基準コミット: `8548160`（`pwa_develop`、プロジェクト保存実装前）
 - アプリ版: `1.0.0+1`
 - SDK宣言: Dart `^3.13.3`
@@ -23,6 +23,7 @@ ADL（Agent Documentation Layer）は、Codexなどの実装エージェント�
 | [`work-guide.md`](work-guide.md) | 実装・テスト開始前 | 変更マップ、検証コマンド、既知の未接続箇所と注意点 |
 | [`../project-folders.md`](../project-folders.md) | 保存方式・画像・移行 | フォルダ構成、Safari、画像同梱JSON、障害復旧 |
 | [`../pwa-preview.md`](../pwa-preview.md) | 検証版の配信・ブランチ運用 | Pagesの設定、PWAのサブパス、Google認証、GitHub利用枠 |
+| [`../security-review-2026-10-22.md`](../security-review-2026-10-22.md) | Node.jsの脆弱性対応 | 公式告知、CIでの修正版固定、依存関係の点検と残る警告 |
 
 ## プロダクト概要
 

@@ -132,6 +132,8 @@ Web境界は `web/calendar_sync.js` と条件付きJS interopです。GISのOAut
 
 Vercelではドメイン直下用に `--base-href /` でビルドし、`tool/prepare_vercel_output.mjs` が `build/web` をBuild Output API形式の `.vercel/output/static` へ変換します。Build Outputには実ファイルを優先するfilesystemルートと、Flutter Web向けの `index.html` フォールバックを含めます。`.github/workflows/deploy-pwa.yml` はProduction用のprebuilt成果物をステージし、Deployment Protectionを通過する認証付き `vercel curl` のHTTP検証に成功した場合だけ、同じprebuilt成果物を `cosplayers-diary-app` の本番ドメインへ公開します。`vercel.json` はVercelのGit自動デプロイを無効化し、公開経路をこのワークフローへ一本化します。公開URLは `https://cosplayers-diary-app.vercel.app` です。
 
+GitHub Actionsのビルド・検証スクリプトは両ワークフローで `actions/setup-node` を使用し、`.node-version` のセキュリティ修正版Node.js 24.22.1で実行します。公開成果物はFlutter Webの静的ファイルのみで、Node.jsのサーバー処理・Functionsは含めません。Vercel CLIはCIでのみ使用し、公開アプリには含めません。
+
 `pre-develop` のpushは `.github/workflows/deploy-pages.yml` でGitHub Pagesの検証版へ配信します。`configure-pages` の公開パスを `--base-href` に渡し、検証済み `build/web` だけをupload/deployします。成果物は公開成功後に削除、失敗時も1日保持です。連続pushは古いrunをキャンセルします。Pages側のdeploy jobにだけ `pages:write`・`id-token:write`・自身のartifactを削除する `actions:write` を付与し、Vercelの資格情報は使用しません。両ワークフローにブランチのjob条件を付け、手動実行も分離しています。
 
 Pagesの同一オリジン上の別プロジェクトを保護するため、localStorageのキー、IndexedDBのhandle保存DB、Service Workerキャッシュを公開base path/scope単位に分けます。ルート配信の従来の保存キーとDB名は維持します。キャッシュ更新時も別scopeのキャッシュを削除しません。Pagesの初回設定・Google認証の生成元・利用枠は [`../pwa-preview.md`](../pwa-preview.md) を参照してください。

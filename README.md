@@ -112,12 +112,12 @@ flutter build web --release --pwa-strategy=none --base-href /
 ```sh
 node tool/verify_pwa.mjs build/web
 node tool/prepare_vercel_output.mjs build/web
-npx --yes --package vercel@60.1.3 vercel deploy --prebuilt --prod --skip-domain
+npx --yes --package vercel@65.0.0 vercel deploy --prebuilt --prod --skip-domain
 ```
 
 Web版は初回に保存モードを必ず選びます。フォルダ保存では同じJSON状態と画像をブラウザ内にも保持し、変更時に指定プロジェクトフォルダへ書き込みます。Safari対応モードでは日記と画像をブラウザ内へ自動保存します。ネイティブ版との移行は設定画面のJSON保存・読み込みで行います。ブラウザデータ削除に備え、定期的にJSONの控えを保存してください。
 
-Vercelへの公開ワークフローは [`.github/workflows/deploy-pwa.yml`](.github/workflows/deploy-pwa.yml) にあります。GitHub ActionsのRepository secretへ `VERCEL_TOKEN` を登録すると、`develop` へのpushまたは手動実行で解析・テスト・PWA検証を行い、Production用のprebuiltデプロイを認証付き `vercel curl` でHTTP検証してから、同じprebuilt成果物を本番ドメインへ公開します。Team IDとProject IDは公開情報のためワークフローに固定しています。VercelのGit自動デプロイは [`vercel.json`](vercel.json) で無効化し、Flutterをビルドしていない空のデプロイが本番を上書きしないようにしています。Vercelプロジェクト名は `cosplayers-diary-app` です。
+Vercelへの公開ワークフローは [`.github/workflows/deploy-pwa.yml`](.github/workflows/deploy-pwa.yml) にあります。GitHub ActionsのRepository secretへ `VERCEL_TOKEN` を登録すると、`develop` へのpushまたは手動実行で解析・テスト・PWA検証を行い、Production用のprebuiltデプロイを認証付き `vercel curl` でHTTP検証してから、同じprebuilt成果物を本番ドメインへ公開します。ビルド・検証スクリプトは [`.node-version`](.node-version) に固定したセキュリティ修正版Node.jsで実行します。Team IDとProject IDは公開情報のためワークフローに固定しています。VercelのGit自動デプロイは [`vercel.json`](vercel.json) で無効化し、Flutterをビルドしていない空のデプロイが本番を上書きしないようにしています。Vercelプロジェクト名は `cosplayers-diary-app` です。
 
 iPhoneではSafariで公開URLを開き、共有メニューから「ホーム画面に追加」を選択します。初回表示と更新取得にはネット接続が必要ですが、その後はキャッシュ済みのアプリをオフラインで起動できます。
 

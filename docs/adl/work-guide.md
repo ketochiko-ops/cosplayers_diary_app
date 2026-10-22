@@ -54,6 +54,7 @@ PWAは初回に指定フォルダ（対応ブラウザ）かブラウザ保存�
 | Googleカレンダー連携 | `features/calendar_sync/`, `web/calendar_sync.js` | 3状態比較、ETag、削除と在庫、日次10回、認証/表示切替、OAuth設定文書 |
 | PWA/配信 | `web/`, `.github/workflows/deploy-pwa.yml`, `deploy-pages.yml` | 本番/検証ブランチ、manifest、base href、保存領域とキャッシュのscope、オフライン再起動 |
 | CSV | `csv_service.dart`, `backup_coordinator.dart` | README列定義、samples、参照検証、BOM |
+| Node.jsのセキュリティ更新 | `.node-version`, `.github/workflows/` | Node公式の修正版、PagesとVercelの両ワークフロー、Vercel CLI、静的成果物 |
 | JSON/旧ZIP読取 | `backup_service.dart`, `backup_coordinator.dart` | 検証前非破壊、サイズ/パス/形式、設定UI |
 | 統計 | `statistics_service.dart`, `dashboard_page.dart` | 回数対日数、年filter、空状態、ID→名称表示 |
 | バックアップ通知 | `backup_reminder.dart`, `settings_page.dart` | 時計境界、未来日時、保存キャンセル |
